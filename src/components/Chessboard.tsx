@@ -18,12 +18,29 @@ import {
 } from "@dnd-kit/core";
 import DraggablePiece from "./DraggablePiece";
 import Image from "next/image";
+import Referee from "@/utils/Referee";
 
-type Piece = {
+export enum TeamType {
+  OPPONENT,
+  OUR,
+}
+
+export enum PieceRole {
+  Bishop,
+  King,
+  Knight,
+  Pawn,
+  Queen,
+  Rook,
+}
+
+export type Piece = {
   id: string;
   image: string;
   x: number;
   y: number;
+  role: PieceRole;
+  team: TeamType;
 };
 
 function getPieceImage(name: string, type: string) {
@@ -34,55 +51,72 @@ function createInitialPieces(): Piece[] {
   const pieces: Piece[] = [];
 
   for (let p = 0; p < 2; p++) {
-    const type = p === 0 ? "Black" : "White";
+    const teamType = p === 0 ? TeamType.OPPONENT : TeamType.OUR;
+    const type = teamType === TeamType.OPPONENT ? "Black" : "White";
 
-    const y = p === 0 ? 7 : 0;
+    const y = teamType === TeamType.OPPONENT ? 7 : 0;
 
     pieces.push({
       id: `rook-${type}-0`,
       image: getPieceImage("Rook", type),
+      role: PieceRole.Rook,
+      team: teamType,
       x: 0,
       y: y,
     });
     pieces.push({
       id: `knight-${type}-1`,
       image: getPieceImage("Knight", type),
+      role: PieceRole.Knight,
+      team: teamType,
       x: 1,
       y: y,
     });
     pieces.push({
       id: `bishop-${type}-2`,
       image: getPieceImage("Bishop", type),
+      role: PieceRole.Bishop,
+      team: teamType,
       x: 2,
       y: y,
     });
     pieces.push({
       id: `queen-${type}-3`,
       image: getPieceImage("Queen", type),
+      role: PieceRole.Queen,
+      team: teamType,
       x: 3,
       y: y,
     });
     pieces.push({
       id: `king-${type}-4`,
       image: getPieceImage("King", type),
+      role: PieceRole.King,
+      team: teamType,
       x: 4,
       y: y,
     });
     pieces.push({
       id: `bishop-${type}-5`,
       image: getPieceImage("Bishop", type),
+      role: PieceRole.Bishop,
+      team: teamType,
       x: 5,
       y: y,
     });
     pieces.push({
       id: `knight-${type}-6`,
       image: getPieceImage("Knight", type),
+      role: PieceRole.Knight,
+      team: teamType,
       x: 6,
       y: y,
     });
     pieces.push({
       id: `rook-${type}-7`,
       image: getPieceImage("Rook", type),
+      role: PieceRole.Rook,
+      team: teamType,
       x: 7,
       y: y,
     });
@@ -92,12 +126,16 @@ function createInitialPieces(): Piece[] {
     pieces.push({
       id: `pawn-black-${i}`,
       image: getPieceImage("Pawn", "Black"),
+      role: PieceRole.Pawn,
+      team: TeamType.OPPONENT,
       x: i,
       y: 6,
     });
     pieces.push({
       id: `pawn-white-${i}`,
       image: getPieceImage("Pawn", "White"),
+      role: PieceRole.Pawn,
+      team: TeamType.OUR,
       x: i,
       y: 1,
     });
@@ -147,9 +185,12 @@ export default function Chessboard() {
   );
 
   const [pieces, setPieces] = useState<Piece[]>(createInitialPieces());
+  console.log(pieces);
   const [selectedPiece, setSelectedPiece] = useState<Piece | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hoveredCellId, setHoveredCellId] = useState<string | null>(null);
+
+  const referee = new Referee();
 
   const pieceMap = useMemo(() => {
     const map = new Map<string, Piece>();
@@ -175,13 +216,26 @@ export default function Chessboard() {
       }
 
       if (selectedPiece) {
-        setPieces((prev) => {
-          return prev
-            .filter(
-              (p) => !(p.x === x && p.y === y && p.id !== selectedPiece.id),
-            )
-            .map((p) => (p.id === selectedPiece.id ? { ...p, x, y } : p));
-        });
+        const validMove = referee.isValidMove(
+          selectedPiece.x,
+          selectedPiece.y,
+          x,
+          y,
+          selectedPiece.role,
+          selectedPiece.team,
+          pieces,
+        );
+
+        if (validMove) {
+          setPieces((prev) => {
+            return prev
+              .filter(
+                (p) => !(p.x === x && p.y === y && p.id !== selectedPiece.id),
+              )
+              .map((p) => (p.id === selectedPiece.id ? { ...p, x, y } : p));
+          });
+        } else {
+        }
 
         setSelectedPiece(null);
       }
@@ -207,13 +261,32 @@ export default function Chessboard() {
     if (!over?.data?.current) return;
 
     const pieceId = active.id as string;
+    const selectedPiece = pieces.find((p) => p.id === pieceId);
+
+    if (!selectedPiece) {
+      return;
+    }
+
     const { x, y } = over.data.current as { x: number; y: number };
 
-    setPieces((prev) => {
-      return prev
-        .filter((p) => !(p.x === x && p.y === y && p.id !== pieceId))
-        .map((p) => (p.id === pieceId ? { ...p, x, y } : p));
-    });
+    const validMove = referee.isValidMove(
+      selectedPiece.x,
+      selectedPiece.y,
+      x,
+      y,
+      selectedPiece.role,
+      selectedPiece.team,
+      pieces,
+    );
+
+    if (validMove) {
+      setPieces((prev) => {
+        return prev
+          .filter((p) => !(p.x === x && p.y === y && p.id !== pieceId))
+          .map((p) => (p.id === pieceId ? { ...p, x, y } : p));
+      });
+    } else {
+    }
   }
 
   function handleDragCancel() {
@@ -249,7 +322,10 @@ export default function Chessboard() {
   }
 
   return (
-    <div ref={boardRef} className="w-160 h-160 bg-white grid grid-cols-8 grid-rows-8">
+    <div
+      ref={boardRef}
+      className="w-160 h-160 bg-white grid grid-cols-8 grid-rows-8"
+    >
       <DndContext
         sensors={sensors}
         modifiers={[restrictToBoard]}
