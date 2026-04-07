@@ -4,7 +4,7 @@ interface Props {
   isBlack: boolean,
 }
 
-export default function Pieces({ isBlack }: Props) {
+export default function CellColor({ isBlack }: Props) {
   return (
     <div
       className={`

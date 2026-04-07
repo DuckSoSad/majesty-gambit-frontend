@@ -1,11 +1,23 @@
 "use client";
 
-import React, { use, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import Cell from "./Cell";
-import Piece from "./Piece";
+import CellColor from "./CellColor";
 
-import { DragEndEvent, DndContext, useSensors, TouchSensor, useSensor, MouseSensor } from "@dnd-kit/core";
+import {
+  DragEndEvent,
+  DragStartEvent,
+  DragOverEvent,
+  DndContext,
+  DragOverlay,
+  useSensors,
+  TouchSensor,
+  useSensor,
+  MouseSensor,
+  Modifier,
+} from "@dnd-kit/core";
 import DraggablePiece from "./DraggablePiece";
+import Image from "next/image";
 
 type Piece = {
   id: string;
@@ -13,6 +25,10 @@ type Piece = {
   x: number;
   y: number;
 };
+
+function getPieceImage(name: string, type: string) {
+  return `/pieces/Light/${name}, ${type}.png`;
+}
 
 function createInitialPieces(): Piece[] {
   const pieces: Piece[] = [];
@@ -24,49 +40,49 @@ function createInitialPieces(): Piece[] {
 
     pieces.push({
       id: `rook-${type}-0`,
-      image: `/pieces/Light/Rook, ${type}.png`,
+      image: getPieceImage("Rook", type),
       x: 0,
       y: y,
     });
     pieces.push({
       id: `knight-${type}-1`,
-      image: `/pieces/Light/Knight, ${type}.png`,
+      image: getPieceImage("Knight", type),
       x: 1,
       y: y,
     });
     pieces.push({
       id: `bishop-${type}-2`,
-      image: `/pieces/Light/Bishop, ${type}.png`,
+      image: getPieceImage("Bishop", type),
       x: 2,
       y: y,
     });
     pieces.push({
       id: `queen-${type}-3`,
-      image: `/pieces/Light/Queen, ${type}.png`,
+      image: getPieceImage("Queen", type),
       x: 3,
       y: y,
     });
     pieces.push({
       id: `king-${type}-4`,
-      image: `/pieces/Light/King, ${type}.png`,
+      image: getPieceImage("King", type),
       x: 4,
       y: y,
     });
     pieces.push({
       id: `bishop-${type}-5`,
-      image: `/pieces/Light/Bishop, ${type}.png`,
+      image: getPieceImage("Bishop", type),
       x: 5,
       y: y,
     });
     pieces.push({
       id: `knight-${type}-6`,
-      image: `/pieces/Light/Knight, ${type}.png`,
+      image: getPieceImage("Knight", type),
       x: 6,
       y: y,
     });
     pieces.push({
       id: `rook-${type}-7`,
-      image: `/pieces/Light/Rook, ${type}.png`,
+      image: getPieceImage("Rook", type),
       x: 7,
       y: y,
     });
@@ -75,13 +91,13 @@ function createInitialPieces(): Piece[] {
   for (let i = 0; i < 8; i++) {
     pieces.push({
       id: `pawn-black-${i}`,
-      image: "/pieces/Light/Pawn, Black.png",
+      image: getPieceImage("Pawn", "Black"),
       x: i,
       y: 6,
     });
     pieces.push({
       id: `pawn-white-${i}`,
-      image: "/pieces/Light/Pawn, White.png",
+      image: getPieceImage("Pawn", "White"),
       x: i,
       y: 1,
     });
@@ -94,55 +110,103 @@ const verticalAxis = [1, 2, 3, 4, 5, 6, 7, 8];
 const horizonAxis = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 export default function Chessboard() {
+  const boardRef = useRef<HTMLDivElement>(null);
+
+  const restrictToBoard: Modifier = useCallback(
+    ({ transform, draggingNodeRect }) => {
+      if (!boardRef.current || !draggingNodeRect) return transform;
+
+      const boardRect = boardRef.current.getBoundingClientRect();
+
+      const minX = boardRect.left - draggingNodeRect.left;
+      const maxX = boardRect.right - draggingNodeRect.right;
+      const minY = boardRect.top - draggingNodeRect.top;
+      const maxY = boardRect.bottom - draggingNodeRect.bottom;
+
+      return {
+        ...transform,
+        x: Math.min(Math.max(transform.x, minX), maxX),
+        y: Math.min(Math.max(transform.y, minY), maxY),
+      };
+    },
+    [],
+  );
+
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: {
-        distance: 10,
+        distance: 3,
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 250,
-        tolerance: 5,
+        delay: 200,
+        tolerance: 6,
       },
-    })
+    }),
   );
 
   const [pieces, setPieces] = useState<Piece[]>(createInitialPieces());
   const [selectedPiece, setSelectedPiece] = useState<Piece | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [hoveredCellId, setHoveredCellId] = useState<string | null>(null);
 
-  let board = [];
+  const pieceMap = useMemo(() => {
+    const map = new Map<string, Piece>();
+    pieces.forEach((p) => map.set(`${p.x},${p.y}`, p));
 
-  const pieceMap = new Map<string, Piece>();
-  pieces.forEach((p) => pieceMap.set(`${p.x},${p.y}`, p));
+    return map;
+  }, [pieces]);
 
-  function pickPiece(x: number, y: number) {
-    const piece = pieces.find((p) => p.x === x && p.y === y);
-    console.log(piece);
+  const activePiece = useMemo(
+    () => pieces.find((p) => p.id === activeId) ?? null,
+    [pieces, activeId],
+  );
 
-    if (!selectedPiece && piece) {
-      setSelectedPiece(piece);
-      return;
-    }
+  const pickPiece = useCallback(
+    (x: number, y: number) => {
+      if (activeId) return;
 
-    if (selectedPiece) {
-      setPieces((prev) => {
-        return prev
-          .filter((p) => !(p.x === x && p.y === y && p.id !== selectedPiece.id))
-          .map((p) => (p.id === selectedPiece.id ? { ...p, x, y } : p));
-      });
+      const piece = pieces.find((p) => p.x === x && p.y === y);
 
-      setSelectedPiece(null);
-    }
+      if (!selectedPiece && piece) {
+        setSelectedPiece(piece);
+        return;
+      }
+
+      if (selectedPiece) {
+        setPieces((prev) => {
+          return prev
+            .filter(
+              (p) => !(p.x === x && p.y === y && p.id !== selectedPiece.id),
+            )
+            .map((p) => (p.id === selectedPiece.id ? { ...p, x, y } : p));
+        });
+
+        setSelectedPiece(null);
+      }
+    },
+    [pieces, selectedPiece, activeId],
+  );
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string);
+    setSelectedPiece(null);
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    setHoveredCellId(event.over ? (event.over.id as string) : null);
   }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over) return;
+
+    setActiveId(null);
+    setHoveredCellId(null);
+
+    if (!over?.data?.current) return;
 
     const pieceId = active.id as string;
-    
-    if (!over?.data?.current) return;
     const { x, y } = over.data.current as { x: number; y: number };
 
     setPieces((prev) => {
@@ -152,22 +216,32 @@ export default function Chessboard() {
     });
   }
 
-  for (let i = verticalAxis.length - 1; i >= 0; i--) {
-    for (let j = 0; j < horizonAxis.length; j++) {
+  function handleDragCancel() {
+    setActiveId(null);
+    setHoveredCellId(null);
+  }
+
+  let board = [];
+
+  for (let i = 7; i >= 0; i--) {
+    for (let j = 0; j < 8; j++) {
       const isBlack = (i + j) % 2 === 0;
 
       const piece = pieceMap.get(`${j},${i}`);
+      const isSelected = selectedPiece?.x === j && selectedPiece?.y === i;
+      const isHovered = hoveredCellId === `${j},${i}`;
 
       board.push(
-        <Cell key={`${i},${j}`} x={j} y={i} pick={() => pickPiece(j, i)} >
+        <Cell key={`${i},${j}`} x={j} y={i} pick={pickPiece}>
           <div className="w-full h-full">
-            <Piece isBlack={isBlack} />
-            {piece && (
-              <DraggablePiece
-                id={piece.id}
-                image={piece.image}
-              />
+            <CellColor isBlack={isBlack} />
+            {isSelected && (
+              <div className="absolute inset-0 border-4 bg-[#B1A7FC] opacity-70 pointer-events-none" />
             )}
+            {isHovered && !isSelected && (
+              <div className="absolute inset-0 border-4 bg-[#B1A7FC] opacity-70 pointer-events-none" />
+            )}
+            {piece && <DraggablePiece id={piece.id} image={piece.image} />}
           </div>
         </Cell>,
       );
@@ -175,10 +249,36 @@ export default function Chessboard() {
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="w-160 h-160 bg-white grid grid-cols-8 grid-rows-8">
+    <div ref={boardRef} className="w-160 h-160 bg-white grid grid-cols-8 grid-rows-8">
+      <DndContext
+        sensors={sensors}
+        modifiers={[restrictToBoard]}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
         {board}
-      </div>
-    </DndContext>
+        <DragOverlay
+          dropAnimation={{
+            duration: 150,
+            easing: "cubic-bezier(0.2, 0, 0, 1)",
+          }}
+        >
+          {activePiece ? (
+            <div className="relative w-full h-full opacity-95 drop-shadow-2xl">
+              <Image
+                src={activePiece.image}
+                alt="dragging piece"
+                fill
+                sizes="80px"
+                className="object-contain pointer-events-none select-none"
+                priority
+              />
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </div>
   );
 }
