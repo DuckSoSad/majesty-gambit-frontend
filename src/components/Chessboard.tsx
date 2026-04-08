@@ -192,7 +192,7 @@ export default function Chessboard() {
   return (
     <div
       ref={boardRef}
-      className="w-160 h-160 bg-white grid grid-cols-8 grid-rows-8"
+      className="w-[95vw] h-[95vw] md:w-160 md:h-160 bg-white grid grid-cols-8 grid-rows-8 shadow-2xl border-3 border-white"
     >
       <DndContext
         sensors={sensors}
