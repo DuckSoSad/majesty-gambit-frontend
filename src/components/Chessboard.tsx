@@ -109,7 +109,6 @@ export default function Chessboard() {
         ) {
           makeMove(selectedPiece.id, x, y);
         }
-
         setSelectedPiece(null);
       }
     },
@@ -176,6 +175,25 @@ export default function Chessboard() {
         <Cell key={`${i},${j}`} x={j} y={i} pick={pickPiece}>
           <div className="w-full h-full">
             <CellColor isBlack={isBlack} />
+
+            {j === 0 && (
+              <span
+                className={`absolute top-0.5 left-0.5 text-[10px] font-bold md:text-xs 
+          ${isBlack ? "text-[#E8EDF9]" : "text-[#B7C0D8]"}`}
+              >
+                {i + 1}
+              </span>
+            )}
+
+            {i === 0 && (
+              <span
+                className={`absolute bottom-0.5 right-0.5 text-[10px] uppercase font-bold md:text-xs 
+          ${isBlack ? "text-[#E8EDF9]" : "text-[#B7C0D8]"}`}
+              >
+                {horizonAxis[j]}
+              </span>
+            )}
+
             {isSelected && (
               <div className="absolute inset-0 border-4 bg-[#B1A7FC] opacity-70 pointer-events-none" />
             )}
