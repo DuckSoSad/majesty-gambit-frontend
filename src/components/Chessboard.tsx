@@ -20,12 +20,14 @@ import DraggablePiece from "./DraggablePiece";
 import Image from "next/image";
 import Referee from "@/utils/Referee";
 import createInitialPieces, { Piece } from "@/Constants";
+import { useGameStore } from "@/store/useGameStore";
 
 const verticalAxis = [1, 2, 3, 4, 5, 6, 7, 8];
 const horizonAxis = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 export default function Chessboard() {
   const boardRef = useRef<HTMLDivElement>(null);
+  const referee = useMemo(() => new Referee(), []);
 
   const restrictToBoard: Modifier = useCallback(
     ({ transform, draggingNodeRect }) => {
@@ -61,12 +63,13 @@ export default function Chessboard() {
     }),
   );
 
-  const [pieces, setPieces] = useState<Piece[]>(createInitialPieces());
+  const pieces = useGameStore((state) => state.pieces);
+  const currentTurn = useGameStore((state) => state.currentTurn);
+  const makeMove = useGameStore((state) => state.makeMove);
+
   const [selectedPiece, setSelectedPiece] = useState<Piece | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hoveredCellId, setHoveredCellId] = useState<string | null>(null);
-
-  const referee = new Referee();
 
   const pieceMap = useMemo(() => {
     const map = new Map<string, Piece>();
@@ -83,34 +86,28 @@ export default function Chessboard() {
   const pickPiece = useCallback(
     (x: number, y: number) => {
       if (activeId) return;
-
       const piece = pieces.find((p) => p.x === x && p.y === y);
 
       if (!selectedPiece && piece) {
-        setSelectedPiece(piece);
+        if (piece.team === currentTurn) {
+          setSelectedPiece(piece);
+        }
         return;
       }
 
       if (selectedPiece) {
-        const validMove = referee.isValidMove(
-          selectedPiece.x,
-          selectedPiece.y,
-          x,
-          y,
-          selectedPiece.role,
-          selectedPiece.team,
-          pieces,
-        );
-
-        if (validMove) {
-          setPieces((prev) => {
-            return prev
-              .filter(
-                (p) => !(p.x === x && p.y === y && p.id !== selectedPiece.id),
-              )
-              .map((p) => (p.id === selectedPiece.id ? { ...p, x, y } : p));
-          });
-        } else {
+        if (
+          referee.isValidMove(
+            selectedPiece.x,
+            selectedPiece.y,
+            x,
+            y,
+            selectedPiece.role,
+            selectedPiece.team,
+            pieces,
+          )
+        ) {
+          makeMove(selectedPiece.id, x, y);
         }
 
         setSelectedPiece(null);
@@ -139,29 +136,24 @@ export default function Chessboard() {
     const pieceId = active.id as string;
     const selectedPiece = pieces.find((p) => p.id === pieceId);
 
-    if (!selectedPiece) {
-      return;
-    }
+    if (!selectedPiece || selectedPiece.team !== currentTurn) return;
 
     const { x, y } = over.data.current as { x: number; y: number };
 
-    const validMove = referee.isValidMove(
-      selectedPiece.x,
-      selectedPiece.y,
-      x,
-      y,
-      selectedPiece.role,
-      selectedPiece.team,
-      pieces,
-    );
-
-    if (validMove) {
-      setPieces((prev) => {
-        return prev
-          .filter((p) => !(p.x === x && p.y === y && p.id !== pieceId))
-          .map((p) => (p.id === pieceId ? { ...p, x, y } : p));
-      });
-    } else {
+    if (selectedPiece) {
+      if (
+        referee.isValidMove(
+          selectedPiece.x,
+          selectedPiece.y,
+          x,
+          y,
+          selectedPiece.role,
+          selectedPiece.team,
+          pieces,
+        )
+      ) {
+        makeMove(pieceId, x, y);
+      }
     }
   }
 
