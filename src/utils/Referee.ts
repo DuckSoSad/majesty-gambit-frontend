@@ -1,4 +1,4 @@
-import { Piece, PieceRole, TeamType } from "@/components/Chessboard";
+import { Piece, PieceRole, TeamType } from "@/Constants";
 
 export default class Referee {
   private isOccupied(x: number, y: number, boardState: Piece[]): boolean {
@@ -74,25 +74,28 @@ export default class Referee {
     const specialRow = team === TeamType.OUR ? 1 : 6;
     const pawnDirection = team === TeamType.OUR ? 1 : -1;
 
-    if (px === x && y - py === pawnDirection) {
-      if (!this.isOccupied(x, y, boardState)) {
-        return true;
+    if (px === x) {
+      if (y - py === pawnDirection) {
+        return !this.isOccupied(x, y, boardState);
       }
-    }
-
-    if (py === specialRow && px === x && y - py === pawnDirection * 2) {
-      if (
-        !this.isOccupied(x, y, boardState) &&
-        !this.isOccupied(x, y - 1, boardState)
-      ) {
-        return true;
+      if (py === specialRow && y - py === pawnDirection * 2) {
+        return (
+          !this.isOccupied(x, y, boardState) &&
+          !this.isOccupied(x, y - pawnDirection, boardState)
+        );
       }
     }
 
     if (Math.abs(x - px) === 1 && y - py === pawnDirection) {
       const target = this.getPieceAt(x, y, boardState);
-      return !!target && target.team !== team;
+      if (target && target.team !== team) {
+        return true;
+      }
+
+      // TODO: Add logic En Passant here
+      // if (this.canEnPassant(px, py, x, y, team, boardState)) return true;
     }
+
     return false;
   }
 
