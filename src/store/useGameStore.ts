@@ -1,7 +1,8 @@
-import createInitialPieces, { Piece, TeamType } from "@/Constants";
+import createInitialPieces, { horizonAxis, Piece, PIECE_ICONS, TeamType, verticalAxis } from "@/Constants";
+import { getPieceIcon } from "@/utils/getPieceIcon";
 import { create } from "zustand";
 
-interface GameState {
+export interface GameState {
   pieces: Piece[];
   currentTurn: TeamType;
   moveHistory: string[];
@@ -25,7 +26,7 @@ export const useGameStore = create<GameState>((set) => ({
 
       const nextTurn = state.currentTurn === TeamType.OUR ? TeamType.OPPONENT : TeamType.OUR;
 
-      const moveNote = `${piece.role} ${pieceId}: (${piece.x},${piece.y}) -> (${toX},${toY})`;
+      const moveNote = `${getPieceIcon(piece)}: ${verticalAxis[piece.x]}${horizonAxis[piece.y]}${verticalAxis[toX]}${horizonAxis[toY]}`;
 
       return {
         pieces: newPieces,

@@ -21,6 +21,7 @@ import Image from "next/image";
 import Referee from "@/utils/Referee";
 import createInitialPieces, { Piece } from "@/Constants";
 import { useGameStore } from "@/store/useGameStore";
+import { toast } from "react-toastify";
 
 const verticalAxis = [1, 2, 3, 4, 5, 6, 7, 8];
 const horizonAxis = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -87,19 +88,31 @@ export default function Chessboard() {
     if (!selectedPiece && !activeId) return [];
     const moves: string[] = [];
 
-    const chosenPiece = pieces.find(p => selectedPiece ? p.id === selectedPiece.id : p.id === activeId);
-    if (!chosenPiece) return [];
+    const chosenPiece = pieces.find((p) =>
+      selectedPiece ? p.id === selectedPiece.id : p.id === activeId,
+    );
+    if (!chosenPiece || chosenPiece.team !== currentTurn) return [];
 
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
-        if (referee.isValidMove(chosenPiece.x, chosenPiece.y, col, row, chosenPiece.role, chosenPiece.team, pieces)) {
+        if (
+          referee.isValidMove(
+            chosenPiece.x,
+            chosenPiece.y,
+            col,
+            row,
+            chosenPiece.role,
+            chosenPiece.team,
+            pieces,
+          )
+        ) {
           moves.push(`${col},${row}`);
         }
       }
     }
 
     return moves;
-  }, [pieces, selectedPiece, activeId, referee])
+  }, [pieces, selectedPiece, activeId, referee]);
 
   const pickPiece = useCallback(
     (x: number, y: number) => {
@@ -126,6 +139,7 @@ export default function Chessboard() {
           )
         ) {
           makeMove(selectedPiece.id, x, y);
+          toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
         }
         setSelectedPiece(null);
       }
@@ -170,6 +184,7 @@ export default function Chessboard() {
         )
       ) {
         makeMove(pieceId, x, y);
+        toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
       }
     }
   }

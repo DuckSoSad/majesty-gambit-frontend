@@ -1,3 +1,21 @@
+export const verticalAxis = [1, 2, 3, 4, 5, 6, 7, 8];
+export const horizonAxis = ["a", "b", "c", "d", "e", "f", "g", "h"];
+
+export const PIECE_ICONS: Record<string, string> = {
+  "pawn-white": "♙",
+  "pawn-black": "♟",
+  "rook-white": "♖",
+  "rook-black": "♜",
+  "knight-white": "♘",
+  "knight-black": "♞",
+  "bishop-white": "♗",
+  "bishop-black": "♝",
+  "queen-white": "♕",
+  "queen-black": "♛",
+  "king-white": "♔",
+  "king-black": "♚",
+};
+
 export enum TeamType {
   OPPONENT,
   OUR,
@@ -35,7 +53,7 @@ export default function createInitialPieces(): Piece[] {
     const y = teamType === TeamType.OPPONENT ? 7 : 0;
 
     pieces.push({
-      id: `rook-${type}-0`,
+      id: crypto.randomUUID(),
       image: getPieceImage("Rook", type),
       role: PieceRole.Rook,
       team: teamType,
@@ -43,7 +61,7 @@ export default function createInitialPieces(): Piece[] {
       y: y,
     });
     pieces.push({
-      id: `knight-${type}-1`,
+      id: crypto.randomUUID(),
       image: getPieceImage("Knight", type),
       role: PieceRole.Knight,
       team: teamType,
@@ -51,7 +69,7 @@ export default function createInitialPieces(): Piece[] {
       y: y,
     });
     pieces.push({
-      id: `bishop-${type}-2`,
+      id: crypto.randomUUID(),
       image: getPieceImage("Bishop", type),
       role: PieceRole.Bishop,
       team: teamType,
@@ -59,7 +77,7 @@ export default function createInitialPieces(): Piece[] {
       y: y,
     });
     pieces.push({
-      id: `queen-${type}-3`,
+      id: crypto.randomUUID(),
       image: getPieceImage("Queen", type),
       role: PieceRole.Queen,
       team: teamType,
@@ -67,7 +85,7 @@ export default function createInitialPieces(): Piece[] {
       y: y,
     });
     pieces.push({
-      id: `king-${type}-4`,
+      id: crypto.randomUUID(),
       image: getPieceImage("King", type),
       role: PieceRole.King,
       team: teamType,
@@ -75,7 +93,7 @@ export default function createInitialPieces(): Piece[] {
       y: y,
     });
     pieces.push({
-      id: `bishop-${type}-5`,
+      id: crypto.randomUUID(),
       image: getPieceImage("Bishop", type),
       role: PieceRole.Bishop,
       team: teamType,
@@ -91,7 +109,7 @@ export default function createInitialPieces(): Piece[] {
       y: y,
     });
     pieces.push({
-      id: `rook-${type}-7`,
+     id: crypto.randomUUID(),
       image: getPieceImage("Rook", type),
       role: PieceRole.Rook,
       team: teamType,
@@ -102,7 +120,7 @@ export default function createInitialPieces(): Piece[] {
 
   for (let i = 0; i < 8; i++) {
     pieces.push({
-      id: `pawn-black-${i}`,
+      id: crypto.randomUUID(),
       image: getPieceImage("Pawn", "Black"),
       role: PieceRole.Pawn,
       team: TeamType.OPPONENT,
@@ -110,7 +128,7 @@ export default function createInitialPieces(): Piece[] {
       y: 6,
     });
     pieces.push({
-      id: `pawn-white-${i}`,
+      id: crypto.randomUUID(),
       image: getPieceImage("Pawn", "White"),
       role: PieceRole.Pawn,
       team: TeamType.OUR,
