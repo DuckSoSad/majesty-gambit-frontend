@@ -29,19 +29,21 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <ToastContainer
+        {/* <ToastContainer
           position="top-right"
           autoClose={3000}
-          hideProgressBar={false}
+          hideProgressBar={true}
           newestOnTop={false}
-          closeOnClick={false}
+          stacked
+          closeButton={false}
+          closeOnClick={true}
           rtl={false}
           pauseOnFocusLoss
           draggable
           pauseOnHover
           theme="light"
           transition={Bounce}
-        />
+        /> */}
         {children}
       </body>
     </html>
