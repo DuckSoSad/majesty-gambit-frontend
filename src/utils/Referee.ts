@@ -34,7 +34,6 @@ export default class Referee {
       tempX += dx;
       tempY += dy;
     }
-
     return true;
   }
 
@@ -59,7 +58,6 @@ export default class Referee {
       tempX += dx;
       tempY += dy;
     }
-
     return true;
   }
 
@@ -196,7 +194,9 @@ export default class Referee {
           this.rookMove(px, py, x, y, team, boardState) ||
           this.bishopMove(px, py, x, y, team, boardState)
         );
+
+      default:
+        return false;
     }
-    return false;
   }
 }

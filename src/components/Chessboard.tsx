@@ -83,6 +83,24 @@ export default function Chessboard() {
     [pieces, activeId],
   );
 
+  const validMoves = useMemo(() => {
+    if (!selectedPiece && !activeId) return [];
+    const moves: string[] = [];
+
+    const chosenPiece = pieces.find(p => selectedPiece ? p.id === selectedPiece.id : p.id === activeId);
+    if (!chosenPiece) return [];
+
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        if (referee.isValidMove(chosenPiece.x, chosenPiece.y, col, row, chosenPiece.role, chosenPiece.team, pieces)) {
+          moves.push(`${col},${row}`);
+        }
+      }
+    }
+
+    return moves;
+  }, [pieces, selectedPiece, activeId, referee])
+
   const pickPiece = useCallback(
     (x: number, y: number) => {
       if (activeId) return;
@@ -194,6 +212,16 @@ export default function Chessboard() {
               </span>
             )}
 
+            {validMoves.includes(`${j},${i}`) && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                {pieceMap.has(`${j},${i}`) ? (
+                  <div className="w-full h-full border-5 border-[#9990EC] opacity-90 rounded-full" />
+                ) : (
+                  <div className="w-5 h-5 md:w-7 md:h-7 bg-[#9990EC] opacity-90 rounded-full" />
+                )}
+              </div>
+            )}
+
             {isSelected && (
               <div className="absolute inset-0 border-4 bg-[#B1A7FC] opacity-70 pointer-events-none" />
             )}
@@ -210,7 +238,7 @@ export default function Chessboard() {
   return (
     <div
       ref={boardRef}
-      className="w-[95vw] h-[95vw] md:w-160 md:h-160 bg-white grid grid-cols-8 grid-rows-8 shadow-2xl border-3 border-white"
+      className="w-[95vw] h-[95vw] md:w-200 md:h-200 bg-white grid grid-cols-8 grid-rows-8 shadow-2xl border-3 border-white"
     >
       <DndContext
         sensors={sensors}
