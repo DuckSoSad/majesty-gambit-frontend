@@ -96,7 +96,7 @@ export default function Chessboard() {
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         if (
-          referee.isValidMove(
+          referee.isMoveLegal(
             chosenPiece.x,
             chosenPiece.y,
             col,
@@ -128,7 +128,7 @@ export default function Chessboard() {
 
       if (selectedPiece) {
         if (
-          referee.isValidMove(
+          referee.isMoveLegal(
             selectedPiece.x,
             selectedPiece.y,
             x,
@@ -139,7 +139,7 @@ export default function Chessboard() {
           )
         ) {
           makeMove(selectedPiece.id, x, y);
-          toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
+          // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
         }
         setSelectedPiece(null);
       }
@@ -173,7 +173,7 @@ export default function Chessboard() {
 
     if (selectedPiece) {
       if (
-        referee.isValidMove(
+        referee.isMoveLegal(
           selectedPiece.x,
           selectedPiece.y,
           x,
@@ -184,7 +184,7 @@ export default function Chessboard() {
         )
       ) {
         makeMove(pieceId, x, y);
-        toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
+        // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
       }
     }
   }

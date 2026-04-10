@@ -199,4 +199,42 @@ export default class Referee {
         return false;
     }
   }
+
+  isKingInCheck(team: TeamType, boardState: Piece[]): boolean {
+    // search our king for check if wasn't checked
+    const king = boardState.find(
+      (p) => p.role === PieceRole.King && p.team === team,
+    );
+    if (!king) return false;
+
+    // get enemy pieces
+    const enemyPieces = boardState.filter((p) => p.team !== team);
+
+    return enemyPieces.some((p) =>
+      this.isValidMove(p.x, p.y, king.x, king.y, p.role, p.team, boardState),
+    );
+  }
+
+  isMoveLegal(
+    px: number,
+    py: number,
+    x: number,
+    y: number,
+    role: PieceRole,
+    team: TeamType,
+    boardState: Piece[],
+  ) {
+    if (!this.isValidMove(px, py, x, y, role, team, boardState)) return false;
+
+    const clonedBoard = boardState
+      .filter((p) => !(p.x === x && p.y === y))
+      .map((p) => {
+        if (p.x === px && p.y === py) {
+          return { ...p, x, y };
+        }
+        return p;
+      });
+
+    return !this.isKingInCheck(team, clonedBoard);
+  }
 }
