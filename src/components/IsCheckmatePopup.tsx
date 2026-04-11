@@ -18,7 +18,7 @@ export default function IsCheckmatePopup({restart}: IsCheckmatePopupProps) {
   const winnerName = winner === TeamType.OUR ? "Đen" : "Trắng";
 
   return (
-    <div className="fixed z-50 inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+    <div className="fixed z-50 inset-0 bg-black/60 flex items-center justify-center">
       <div className="bg-[#B1A7FC] text-center rounded-2xl shadow-2xl w-[90%] max-w-md p-8 animate-in fade-in zoom-in duration-300">
         <h2 className="text-sm font-bold text-[#4A447D] uppercase tracking-widest mb-2">
           Trận đấu kết thúc
