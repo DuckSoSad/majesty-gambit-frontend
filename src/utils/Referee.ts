@@ -237,4 +237,20 @@ export default class Referee {
 
     return !this.isKingInCheck(team, clonedBoard);
   }
+  getValidMoveCounts(team: TeamType, boardState: Piece[]): number {
+    const myPieces = boardState.filter(p => p.team === team);
+    let moveCounts = 0;
+
+    myPieces.forEach(p => {
+      for (let i = 7; i >= 0; i--) {
+        for (let j = 0; j < 8; j++) {
+          if (this.isMoveLegal(p.x, p.y, j, i, p.role, p.team, boardState)) {
+            moveCounts++
+          }
+        }
+      }
+    })
+
+    return moveCounts;
+  }
 }

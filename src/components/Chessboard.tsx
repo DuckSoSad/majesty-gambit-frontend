@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Cell from "./Cell";
 import CellColor from "./CellColor";
 
@@ -19,9 +25,11 @@ import {
 import DraggablePiece from "./DraggablePiece";
 import Image from "next/image";
 import Referee from "@/utils/Referee";
-import createInitialPieces, { Piece } from "@/Constants";
+import createInitialPieces, { Piece, TeamType } from "@/Constants";
 import { useGameStore } from "@/store/useGameStore";
 import { toast } from "react-toastify";
+import { useChessSounds } from "@/hooks/useChessSound";
+import IsCheckmatePopup from "./IsCheckmatePopup";
 
 const verticalAxis = [1, 2, 3, 4, 5, 6, 7, 8];
 const horizonAxis = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -64,6 +72,8 @@ export default function Chessboard() {
     }),
   );
 
+  const { playMove, playCapture } = useChessSounds();
+
   const pieces = useGameStore((state) => state.pieces);
   const currentTurn = useGameStore((state) => state.currentTurn);
   const makeMove = useGameStore((state) => state.makeMove);
@@ -71,6 +81,25 @@ export default function Chessboard() {
   const [selectedPiece, setSelectedPiece] = useState<Piece | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hoveredCellId, setHoveredCellId] = useState<string | null>(null);
+
+  const [isCheckmate, setIsCheckmate] = useState<boolean>(false);
+  const [isStalemate, setIsStalemate] = useState<boolean>(false);
+
+  useEffect(() => {
+    const movesCount = referee.getValidMoveCounts(currentTurn, pieces);
+
+    if (movesCount === 0) {
+      if (referee.isKingInCheck(currentTurn, pieces)) {
+        toast.error(
+          `CHECKMATE! ${currentTurn === TeamType.OUR ? "Đen" : "Trắng"} thắng!`,
+        );
+        setIsCheckmate(true);
+      } else {
+        toast.info("Hòa cờ (Stalemate)!");
+        setIsStalemate(true);
+      }
+    }
+  }, [currentTurn, pieces, referee]);
 
   const pieceMap = useMemo(() => {
     const map = new Map<string, Piece>();
@@ -138,6 +167,7 @@ export default function Chessboard() {
             pieces,
           )
         ) {
+          playMove();
           makeMove(selectedPiece.id, x, y);
           // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
         }
@@ -183,6 +213,7 @@ export default function Chessboard() {
           pieces,
         )
       ) {
+        playMove();
         makeMove(pieceId, x, y);
         // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
       }
@@ -284,6 +315,10 @@ export default function Chessboard() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {isCheckmate && (
+        <IsCheckmatePopup restart={() => setIsCheckmate(false)}/>
+      )}
     </div>
   );
 }
