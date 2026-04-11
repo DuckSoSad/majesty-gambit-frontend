@@ -72,7 +72,8 @@ export default function Chessboard() {
     }),
   );
 
-  const { playMove, playCapture } = useChessSounds();
+  const { playGameStart, playMove, playMoveCheck, playCapture } =
+    useChessSounds();
 
   const pieces = useGameStore((state) => state.pieces);
   const currentTurn = useGameStore((state) => state.currentTurn);
@@ -83,6 +84,28 @@ export default function Chessboard() {
   const [hoveredCellId, setHoveredCellId] = useState<string | null>(null);
 
   const isGameOver = useGameStore((state) => state.isGameOver);
+  const isCheck = useGameStore((state) => state.isCheck);
+  const moveHistory = useGameStore((state) => state.moveHistory);
+
+  useEffect(() => {
+    if (moveHistory.length !== 0) return;
+    playGameStart();
+  }, [moveHistory.length]);
+
+  useEffect(() => {
+    if (moveHistory.length === 0) return;
+
+    const lastMove = moveHistory[moveHistory.length - 1];
+    const isCapture = lastMove.includes("x");
+
+    if (isCheck) {
+      playMoveCheck();
+    } else if (isCapture) {
+      playCapture();
+    } else {
+      playMove();
+    }
+  }, [moveHistory, isCheck]);
 
   const [isCheckmate, setIsCheckmate] = useState<boolean>(false);
 
@@ -158,7 +181,6 @@ export default function Chessboard() {
             pieces,
           )
         ) {
-          playMove();
           makeMove(selectedPiece.id, x, y);
           // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
         }
@@ -204,7 +226,6 @@ export default function Chessboard() {
           pieces,
         )
       ) {
-        playMove();
         makeMove(pieceId, x, y);
         // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
       }
@@ -308,7 +329,7 @@ export default function Chessboard() {
       </DndContext>
 
       {isCheckmate && (
-        <IsCheckmatePopup restart={() => setIsCheckmate(false)}/>
+        <IsCheckmatePopup restart={() => setIsCheckmate(false)} />
       )}
     </div>
   );

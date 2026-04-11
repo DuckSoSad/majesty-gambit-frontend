@@ -15,6 +15,7 @@ export interface GameState {
   ourEatenHistory: string[];
   opnEatenHistory: string[];
   moveHistory: string[];
+  isCheck: boolean;
   isGameOver: boolean;
   winner: TeamType | null;
   makeMove: (pieceId: string, toX: number, toY: number) => void;
@@ -29,6 +30,7 @@ export const useGameStore = create<GameState>((set) => ({
   ourEatenHistory: [],
   opnEatenHistory: [],
   moveHistory: [],
+  isCheck: false,
   isGameOver: false,
   winner: null,
 
@@ -37,40 +39,48 @@ export const useGameStore = create<GameState>((set) => ({
       const piece = state.pieces.find((p) => p.id === pieceId);
       if (!piece) return state;
 
-      const newPieces = state.pieces
-        .filter((p) => !(p.x === toX && p.y === toY && p.id !== pieceId))
-        .map((p) => (p.id === pieceId ? { ...p, x: toX, y: toY } : p));
-
-      const eatenPiece = state.pieces.find((p) => p.x === toX && p.y === toY);
-
-      let newOurEaten = state.ourEatenHistory;
-      let newOpnEaten = state.opnEatenHistory;
-
-      if (eatenPiece) {
-        const icon = getPieceIcon(eatenPiece);
-        if (eatenPiece.team === TeamType.OUR) {
-          newOurEaten = [...state.ourEatenHistory, icon];
+      const targetPiece = state.pieces.find((p) => p.x === toX && p.y === toY);
+      
+      const newPieces = state.pieces.reduce((acc, p) => {
+        if (p.x === toX && p.y === toY && p.id !== pieceId) return acc;
+        if (p.id === pieceId) {
+          acc.push({ ...p, x: toX, y: toY });
         } else {
-          newOpnEaten = [...state.opnEatenHistory, icon];
+          acc.push(p);
+        }
+        return acc;
+      }, [] as Piece[]);
+
+      let { ourEatenHistory, opnEatenHistory } = state;
+      if (targetPiece) {
+        const icon = getPieceIcon(targetPiece);
+        if (targetPiece.team === TeamType.OPPONENT) {
+          ourEatenHistory = [...ourEatenHistory, icon];
+        } else {
+          opnEatenHistory = [...opnEatenHistory, icon];
         }
       }
 
-      const nextTurn =
-        state.currentTurn === TeamType.OUR ? TeamType.OPPONENT : TeamType.OUR;
+      const nextTurn = state.currentTurn === TeamType.OUR ? TeamType.OPPONENT : TeamType.OUR;
 
-      const moveNote = `${getPieceIcon(piece)}: ${verticalAxis[piece.x]}${horizonAxis[piece.y]} -> ${verticalAxis[toX]}${horizonAxis[toY]}`;
-
+      const isKingInCheck = referee.isKingInCheck(nextTurn, newPieces);
       const movesCount = referee.getValidMovesCount(nextTurn, newPieces);
-      const isKingInCheck = referee.isKingInCheck(nextTurn, state.pieces);
+      const isGameOver = movesCount === 0;
+
+      const fromCoord = `${verticalAxis[piece.x]}${horizonAxis[piece.y]}`;
+      const toCoord = `${verticalAxis[toX]}${horizonAxis[toY]}`;
+      const actionChar = targetPiece ? 'x' : '';
+      const moveNote = `${getPieceIcon(piece)}: ${fromCoord}${actionChar}${toCoord}${isKingInCheck && !isGameOver ? '+' : ''}${isKingInCheck && isGameOver ? '#' : ''}`;
 
       return {
         pieces: newPieces,
         currentTurn: nextTurn,
         moveHistory: [...state.moveHistory, moveNote],
-        ourEatenHistory: newOurEaten,
-        opnEatenHistory: newOpnEaten,
-        isGameOver: movesCount === 0,
-        winner: movesCount === 0 && isKingInCheck ? nextTurn : null,
+        ourEatenHistory,
+        opnEatenHistory,
+        isCheck: isKingInCheck,
+        isGameOver,
+        winner: isGameOver && isKingInCheck ? state.currentTurn : null, 
       };
     }),
 
