@@ -82,24 +82,15 @@ export default function Chessboard() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hoveredCellId, setHoveredCellId] = useState<string | null>(null);
 
+  const isGameOver = useGameStore((state) => state.isGameOver);
+
   const [isCheckmate, setIsCheckmate] = useState<boolean>(false);
-  const [isStalemate, setIsStalemate] = useState<boolean>(false);
 
   useEffect(() => {
-    const movesCount = referee.getValidMoveCounts(currentTurn, pieces);
-
-    if (movesCount === 0) {
-      if (referee.isKingInCheck(currentTurn, pieces)) {
-        toast.error(
-          `CHECKMATE! ${currentTurn === TeamType.OUR ? "Đen" : "Trắng"} thắng!`,
-        );
-        setIsCheckmate(true);
-      } else {
-        toast.info("Hòa cờ (Stalemate)!");
-        setIsStalemate(true);
-      }
+    if (isGameOver) {
+      setIsCheckmate(true);
     }
-  }, [currentTurn, pieces, referee]);
+  }, [isGameOver]);
 
   const pieceMap = useMemo(() => {
     const map = new Map<string, Piece>();

@@ -6,6 +6,7 @@ import createInitialPieces, {
   verticalAxis,
 } from "@/Constants";
 import { getPieceIcon } from "@/utils/getPieceIcon";
+import Referee from "@/utils/Referee";
 import { create } from "zustand";
 
 export interface GameState {
@@ -14,9 +15,13 @@ export interface GameState {
   ourEatenHistory: string[];
   opnEatenHistory: string[];
   moveHistory: string[];
+  isGameOver: boolean;
+  winner: TeamType | null;
   makeMove: (pieceId: string, toX: number, toY: number) => void;
   resetGame: () => void;
 }
+
+const referee = new Referee();
 
 export const useGameStore = create<GameState>((set) => ({
   pieces: createInitialPieces(),
@@ -24,6 +29,8 @@ export const useGameStore = create<GameState>((set) => ({
   ourEatenHistory: [],
   opnEatenHistory: [],
   moveHistory: [],
+  isGameOver: false,
+  winner: null,
 
   makeMove: (pieceId, toX, toY) =>
     set((state) => {
@@ -35,11 +42,16 @@ export const useGameStore = create<GameState>((set) => ({
         .map((p) => (p.id === pieceId ? { ...p, x: toX, y: toY } : p));
 
       const eatenPiece = state.pieces.find((p) => p.x === toX && p.y === toY);
+
+      let newOurEaten = state.ourEatenHistory;
+      let newOpnEaten = state.opnEatenHistory;
+
       if (eatenPiece) {
-        if (eatenPiece.team === 0) {
-          state.ourEatenHistory.push(getPieceIcon(eatenPiece));
+        const icon = getPieceIcon(eatenPiece);
+        if (eatenPiece.team === TeamType.OUR) {
+          newOurEaten = [...state.ourEatenHistory, icon];
         } else {
-          state.opnEatenHistory.push(getPieceIcon(eatenPiece));
+          newOpnEaten = [...state.opnEatenHistory, icon];
         }
       }
 
@@ -48,10 +60,17 @@ export const useGameStore = create<GameState>((set) => ({
 
       const moveNote = `${getPieceIcon(piece)}: ${verticalAxis[piece.x]}${horizonAxis[piece.y]} -> ${verticalAxis[toX]}${horizonAxis[toY]}`;
 
+      const movesCount = referee.getValidMovesCount(nextTurn, newPieces);
+      const isKingInCheck = referee.isKingInCheck(nextTurn, state.pieces);
+
       return {
         pieces: newPieces,
         currentTurn: nextTurn,
         moveHistory: [...state.moveHistory, moveNote],
+        ourEatenHistory: newOurEaten,
+        opnEatenHistory: newOpnEaten,
+        isGameOver: movesCount === 0,
+        winner: movesCount === 0 && isKingInCheck ? nextTurn : null,
       };
     }),
 

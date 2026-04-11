@@ -8,7 +8,7 @@ type IsCheckmatePopupProps = {
 
 export default function IsCheckmatePopup({restart}: IsCheckmatePopupProps) {
   const resetGame = useGameStore((state) => state.resetGame);
-  const winner = useGameStore((state) => state.currentTurn); 
+  const winner = useGameStore((state) => state.winner); 
 
   const handleRestartGame = () => {
     restart();
@@ -23,7 +23,7 @@ export default function IsCheckmatePopup({restart}: IsCheckmatePopupProps) {
         <h2 className="text-sm font-bold text-[#4A447D] uppercase tracking-widest mb-2">
           Trận đấu kết thúc
         </h2>
-        <p className="text-4xl font-black text-black uppercase mb-6">
+        <p className="text-4xl uppercase mb-6 font-bold tracking-tight text-slate-900">
           {winnerName} Thắng!
         </p>
         
