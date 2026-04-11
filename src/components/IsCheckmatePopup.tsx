@@ -15,7 +15,7 @@ export default function IsCheckmatePopup({restart}: IsCheckmatePopupProps) {
     resetGame();
   }
 
-  const winnerName = winner === TeamType.OUR ? "Đen" : "Trắng";
+  const winnerName = winner === TeamType.OUR ? "Trắng" : "Đen";
 
   return (
     <div className="fixed z-50 inset-0 bg-black/60 flex items-center justify-center">
