@@ -1,7 +1,8 @@
 import createInitialPieces, {
+  getPieceImage,
   horizonAxis,
   Piece,
-  PIECE_ICONS,
+  PieceRole,
   TeamType,
   verticalAxis,
 } from "@/Constants";
@@ -19,6 +20,7 @@ export interface GameState {
   isGameOver: boolean;
   winner: TeamType | null;
   makeMove: (pieceId: string, toX: number, toY: number) => void;
+  promotePawn: (pieceId: string, role: PieceRole) => void;
   resetGame: () => void;
 }
 
@@ -40,7 +42,7 @@ export const useGameStore = create<GameState>((set) => ({
       if (!piece) return state;
 
       const targetPiece = state.pieces.find((p) => p.x === toX && p.y === toY);
-      
+
       const newPieces = state.pieces.reduce((acc, p) => {
         if (p.x === toX && p.y === toY && p.id !== pieceId) return acc;
         if (p.id === pieceId) {
@@ -61,7 +63,8 @@ export const useGameStore = create<GameState>((set) => ({
         }
       }
 
-      const nextTurn = state.currentTurn === TeamType.OUR ? TeamType.OPPONENT : TeamType.OUR;
+      const nextTurn =
+        state.currentTurn === TeamType.OUR ? TeamType.OPPONENT : TeamType.OUR;
 
       const isKingInCheck = referee.isKingInCheck(nextTurn, newPieces);
       const movesCount = referee.getValidMovesCount(nextTurn, newPieces);
@@ -69,8 +72,8 @@ export const useGameStore = create<GameState>((set) => ({
 
       const fromCoord = `${verticalAxis[piece.x]}${horizonAxis[piece.y]}`;
       const toCoord = `${verticalAxis[toX]}${horizonAxis[toY]}`;
-      const actionChar = targetPiece ? 'x' : '';
-      const moveNote = `${getPieceIcon(piece)}: ${fromCoord}${actionChar}${toCoord}${isKingInCheck && !isGameOver ? '+' : ''}${isKingInCheck && isGameOver ? '#' : ''}`;
+      const actionChar = targetPiece ? "x" : "";
+      const moveNote = `${getPieceIcon(piece)}: ${fromCoord}${actionChar}${toCoord}${isKingInCheck && !isGameOver ? "+" : ""}${isKingInCheck && isGameOver ? "#" : ""}`;
 
       return {
         pieces: newPieces,
@@ -80,8 +83,26 @@ export const useGameStore = create<GameState>((set) => ({
         opnEatenHistory,
         isCheck: isKingInCheck,
         isGameOver,
-        winner: isGameOver && isKingInCheck ? state.currentTurn : null, 
+        winner: isGameOver && isKingInCheck ? state.currentTurn : null,
       };
+    }),
+
+  promotePawn: (pieceId: string, role: PieceRole) =>
+    set((state) => {
+      const type = state.currentTurn === TeamType.OUR ? "White" : "Black";
+
+      const newPieces = state.pieces.map((p) => {
+        if (p.id === pieceId) {
+          return {
+            ...p,
+            role: role,
+            image: getPieceImage(PieceRole[role], type),
+          };
+        }
+        return p;
+      });
+
+      return { pieces: newPieces };
     }),
 
   resetGame: () =>

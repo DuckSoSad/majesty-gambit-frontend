@@ -25,11 +25,12 @@ import {
 import DraggablePiece from "./DraggablePiece";
 import Image from "next/image";
 import Referee from "@/utils/Referee";
-import createInitialPieces, { Piece, TeamType } from "@/Constants";
+import createInitialPieces, { Piece, PieceRole, TeamType } from "@/Constants";
 import { useGameStore } from "@/store/useGameStore";
 import { toast } from "react-toastify";
 import { useChessSounds } from "@/hooks/useChessSound";
 import IsCheckmatePopup from "./IsCheckmatePopup";
+import PromotionPopup from "./PromotionPopup";
 
 const verticalAxis = [1, 2, 3, 4, 5, 6, 7, 8];
 const horizonAxis = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -77,7 +78,9 @@ export default function Chessboard() {
 
   const pieces = useGameStore((state) => state.pieces);
   const currentTurn = useGameStore((state) => state.currentTurn);
+
   const makeMove = useGameStore((state) => state.makeMove);
+  const promotePawn = useGameStore((state) => state.promotePawn);
 
   const [selectedPiece, setSelectedPiece] = useState<Piece | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -86,6 +89,12 @@ export default function Chessboard() {
   const isGameOver = useGameStore((state) => state.isGameOver);
   const isCheck = useGameStore((state) => state.isCheck);
   const moveHistory = useGameStore((state) => state.moveHistory);
+
+  const [pendingPromotion, setPendingPromotion] = useState<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   useEffect(() => {
     if (moveHistory.length !== 0) return;
@@ -157,6 +166,40 @@ export default function Chessboard() {
     return moves;
   }, [pieces, selectedPiece, activeId, referee]);
 
+  function checkBeforeMove(x: number, y: number, selectedPiece: Piece | null) {
+    if (!selectedPiece) return;
+
+    if (
+      referee.isMoveLegal(
+        selectedPiece.x,
+        selectedPiece.y,
+        x,
+        y,
+        selectedPiece.role,
+        selectedPiece.team,
+        pieces,
+      )
+    ) {
+      if (referee.isPromotionMove(y, selectedPiece)) {
+        setPendingPromotion({ id: selectedPiece.id, x, y });
+        return;
+      }
+      makeMove(selectedPiece.id, x, y);
+      // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
+    }
+  }
+
+  const handlePromotionSelect = (role: PieceRole) => {
+    if (pendingPromotion) {
+      promotePawn(pendingPromotion.id, role);
+      makeMove(pendingPromotion.id, pendingPromotion.x, pendingPromotion.y);
+
+      playMove();
+
+      setPendingPromotion(null);
+    }
+  };
+
   const pickPiece = useCallback(
     (x: number, y: number) => {
       if (activeId) return;
@@ -169,23 +212,8 @@ export default function Chessboard() {
         return;
       }
 
-      if (selectedPiece) {
-        if (
-          referee.isMoveLegal(
-            selectedPiece.x,
-            selectedPiece.y,
-            x,
-            y,
-            selectedPiece.role,
-            selectedPiece.team,
-            pieces,
-          )
-        ) {
-          makeMove(selectedPiece.id, x, y);
-          // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
-        }
-        setSelectedPiece(null);
-      }
+      checkBeforeMove(x, y, selectedPiece);
+      setSelectedPiece(null);
     },
     [pieces, selectedPiece, activeId],
   );
@@ -214,22 +242,7 @@ export default function Chessboard() {
 
     const { x, y } = over.data.current as { x: number; y: number };
 
-    if (selectedPiece) {
-      if (
-        referee.isMoveLegal(
-          selectedPiece.x,
-          selectedPiece.y,
-          x,
-          y,
-          selectedPiece.role,
-          selectedPiece.team,
-          pieces,
-        )
-      ) {
-        makeMove(pieceId, x, y);
-        // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
-      }
-    }
+    checkBeforeMove(x, y, selectedPiece);
   }
 
   function handleDragCancel() {
@@ -330,6 +343,10 @@ export default function Chessboard() {
 
       {isCheckmate && (
         <IsCheckmatePopup restart={() => setIsCheckmate(false)} />
+      )}
+
+      {pendingPromotion && (
+        <PromotionPopup team={currentTurn} onSelect={handlePromotionSelect} />
       )}
     </div>
   );

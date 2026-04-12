@@ -39,7 +39,7 @@ export type Piece = {
   team: TeamType;
 };
 
-function getPieceImage(name: string, type: string) {
+export function getPieceImage(name: string, type: string) {
   return `/pieces/Light/${name}, ${type}.png`;
 }
 
@@ -101,7 +101,7 @@ export default function createInitialPieces(): Piece[] {
       y: y,
     });
     pieces.push({
-      id: `knight-${type}-6`,
+      id: crypto.randomUUID(),
       image: getPieceImage("Knight", type),
       role: PieceRole.Knight,
       team: teamType,

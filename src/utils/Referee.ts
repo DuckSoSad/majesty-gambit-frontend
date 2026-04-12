@@ -237,20 +237,31 @@ export default class Referee {
 
     return !this.isKingInCheck(team, clonedBoard);
   }
+
   getValidMovesCount(team: TeamType, boardState: Piece[]): number {
-    const myPieces = boardState.filter(p => p.team === team);
+    const myPieces = boardState.filter((p) => p.team === team);
     let moveCounts = 0;
 
-    myPieces.forEach(p => {
+    myPieces.forEach((p) => {
       for (let i = 7; i >= 0; i--) {
         for (let j = 0; j < 8; j++) {
           if (this.isMoveLegal(p.x, p.y, j, i, p.role, p.team, boardState)) {
-            moveCounts++
+            moveCounts++;
           }
         }
       }
-    })
+    });
 
     return moveCounts;
+  }
+
+  // pawn promotion
+  isPromotionMove(toY: number, piece: Piece): boolean {
+    if (piece.role !== PieceRole.Pawn) return false;
+
+    return (
+      (piece.team === TeamType.OUR && toY === 7) ||
+      (piece.team === TeamType.OPPONENT && toY === 0)
+    );
   }
 }
