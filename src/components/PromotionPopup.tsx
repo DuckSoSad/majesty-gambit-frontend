@@ -32,7 +32,7 @@ export default function PromotionPopup({ team, onSelect }: PromotionPopupProps) 
     <div className="fixed z-50 inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
       <div className="bg-[#B1A7FC] text-center rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in duration-300">
         <h3 className="text-xl text-white font-bold mb-4 uppercase tracking-wider">Chọn quân phong cấp</h3>
-        <div className="flex gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {promotionItems.map((p, idx) => (
             <button
               key={idx}
