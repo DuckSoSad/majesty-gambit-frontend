@@ -44,7 +44,7 @@ export default function MoveHistory() {
       <div className="bg-[#B7C0D8] border-t-3 border-[#B7C0D8] rounded-b-xl h-36 p-3 text-start overflow-y-auto">
         <div className="grid grid-cols-2 gap-3">
           <div className="text-center">
-            <p className="text-[#34384D]">OUR</p>
+            <p className="text-[#34384D] uppercase">Trắng</p>
             <div className="flex flex-wrap gap-1 max-w-full">
               {ourEatenHistory.map((icon, index) => (
                 <span
@@ -57,7 +57,7 @@ export default function MoveHistory() {
             </div>
           </div>
           <div className="text-center">
-            <p className="text-[#34384D]">OPPONENT</p>
+            <p className="text-[#34384D] uppercase">Đen</p>
             <div className="flex flex-wrap gap-1 max-w-full">
               {opnEatenHistory.map((icon, index) => (
                 <span

@@ -70,8 +70,8 @@ export const useGameStore = create<GameState>((set) => ({
       const movesCount = referee.getValidMovesCount(nextTurn, newPieces);
       const isGameOver = movesCount === 0;
 
-      const fromCoord = `${verticalAxis[piece.x]}${horizonAxis[piece.y]}`;
-      const toCoord = `${verticalAxis[toX]}${horizonAxis[toY]}`;
+      const fromCoord = `${verticalAxis[piece.y]}${horizonAxis[piece.x]}`;
+      const toCoord = `${verticalAxis[toY]}${horizonAxis[toX]}`;
       const actionChar = targetPiece ? "x" : "";
       const moveNote = `${getPieceIcon(piece)}: ${fromCoord}${actionChar}${toCoord}${isKingInCheck && !isGameOver ? "+" : ""}${isKingInCheck && isGameOver ? "#" : ""}`;
 
