@@ -41,12 +41,24 @@ export const useGameStore = create<GameState>((set) => ({
       const piece = state.pieces.find((p) => p.id === pieceId);
       if (!piece) return state;
 
-      const targetPiece = state.pieces.find((p) => p.x === toX && p.y === toY);
+      const isEnPassant = referee.canEnPassant(
+        piece.x,
+        piece.y,
+        toX,
+        toY,
+        piece.team,
+        state.pieces,
+        state.moveHistory,
+      );
+
+      const targetPiece = isEnPassant ? state.pieces.find((p) => p.x === toX && p.y === piece.y) : state.pieces.find((p) => p.x === toX && p.y === toY);
 
       const newPieces = state.pieces.reduce((acc, p) => {
         if (p.x === toX && p.y === toY && p.id !== pieceId) return acc;
         if (p.id === pieceId) {
           acc.push({ ...p, x: toX, y: toY });
+        } else if (targetPiece && p.id === targetPiece.id) {
+          return acc;
         } else {
           acc.push(p);
         }
@@ -66,12 +78,20 @@ export const useGameStore = create<GameState>((set) => ({
       const nextTurn =
         state.currentTurn === TeamType.OUR ? TeamType.OPPONENT : TeamType.OUR;
 
-      const isKingInCheck = referee.isKingInCheck(nextTurn, newPieces);
-      const movesCount = referee.getValidMovesCount(nextTurn, newPieces);
+      const isKingInCheck = referee.isKingInCheck(
+        nextTurn,
+        newPieces,
+        state.moveHistory,
+      );
+      const movesCount = referee.getValidMovesCount(
+        nextTurn,
+        newPieces,
+        state.moveHistory,
+      );
       const isGameOver = movesCount === 0;
 
-      const fromCoord = `${verticalAxis[piece.y]}${horizonAxis[piece.x]}`;
-      const toCoord = `${verticalAxis[toY]}${horizonAxis[toX]}`;
+      const fromCoord = `${horizonAxis[piece.x]}${verticalAxis[piece.y]}`;
+      const toCoord = `${horizonAxis[toX]}${verticalAxis[toY]}`;
       const actionChar = targetPiece ? "x" : "";
       const moveNote = `${getPieceIcon(piece)}: ${fromCoord}${actionChar}${toCoord}${isKingInCheck && !isGameOver ? "+" : ""}${isKingInCheck && isGameOver ? "#" : ""}`;
 

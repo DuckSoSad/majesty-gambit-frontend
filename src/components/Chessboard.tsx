@@ -156,6 +156,7 @@ export default function Chessboard() {
             chosenPiece.role,
             chosenPiece.team,
             pieces,
+            moveHistory,
           )
         ) {
           moves.push(`${col},${row}`);
@@ -178,6 +179,7 @@ export default function Chessboard() {
         selectedPiece.role,
         selectedPiece.team,
         pieces,
+        moveHistory,
       )
     ) {
       if (referee.isPromotionMove(y, selectedPiece)) {

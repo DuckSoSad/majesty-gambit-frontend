@@ -1,4 +1,10 @@
-import { Piece, PieceRole, TeamType } from "@/Constants";
+import {
+  horizonAxis,
+  Piece,
+  PieceRole,
+  TeamType,
+  verticalAxis,
+} from "@/Constants";
 
 export default class Referee {
   private isOccupied(x: number, y: number, boardState: Piece[]): boolean {
@@ -68,6 +74,7 @@ export default class Referee {
     y: number,
     team: TeamType,
     boardState: Piece[],
+    moveHistory: string[],
   ): boolean {
     const specialRow = team === TeamType.OUR ? 1 : 6;
     const pawnDirection = team === TeamType.OUR ? 1 : -1;
@@ -84,14 +91,15 @@ export default class Referee {
       }
     }
 
+    if (this.canEnPassant(px, py, x, y, team, boardState, moveHistory)) {
+      return true;
+    }
+
     if (Math.abs(x - px) === 1 && y - py === pawnDirection) {
       const target = this.getPieceAt(x, y, boardState);
       if (target && target.team !== team) {
         return true;
       }
-
-      // TODO: Add logic En Passant here
-      // if (this.canEnPassant(px, py, x, y, team, boardState)) return true;
     }
 
     return false;
@@ -170,12 +178,13 @@ export default class Referee {
     role: PieceRole,
     team: TeamType,
     boardState: Piece[],
+    moveHistory: string[],
   ) {
     if (px === x && py === y) return false;
 
     switch (role) {
       case PieceRole.Pawn:
-        return this.pawnMove(px, py, x, y, team, boardState);
+        return this.pawnMove(px, py, x, y, team, boardState, moveHistory);
 
       case PieceRole.Knight:
         return this.knightMove(px, py, x, y, team, boardState);
@@ -200,7 +209,11 @@ export default class Referee {
     }
   }
 
-  isKingInCheck(team: TeamType, boardState: Piece[]): boolean {
+  isKingInCheck(
+    team: TeamType,
+    boardState: Piece[],
+    moveHistory: string[],
+  ): boolean {
     // search our king for check if wasn't checked
     const king = boardState.find(
       (p) => p.role === PieceRole.King && p.team === team,
@@ -211,7 +224,16 @@ export default class Referee {
     const enemyPieces = boardState.filter((p) => p.team !== team);
 
     return enemyPieces.some((p) =>
-      this.isValidMove(p.x, p.y, king.x, king.y, p.role, p.team, boardState),
+      this.isValidMove(
+        p.x,
+        p.y,
+        king.x,
+        king.y,
+        p.role,
+        p.team,
+        boardState,
+        moveHistory,
+      ),
     );
   }
 
@@ -223,11 +245,21 @@ export default class Referee {
     role: PieceRole,
     team: TeamType,
     boardState: Piece[],
-  ) {
-    if (!this.isValidMove(px, py, x, y, role, team, boardState)) return false;
+    moveHistory: string[],
+  ): boolean {
+    if (!this.isValidMove(px, py, x, y, role, team, boardState, moveHistory))
+      return false;
+
+    const isEnPassantMove =
+      role === PieceRole.Pawn && px !== x && !this.isOccupied(x, y, boardState);
 
     const clonedBoard = boardState
-      .filter((p) => !(p.x === x && p.y === y))
+      .filter((p) => {
+        if (isEnPassantMove) {
+          return !(p.x === x && p.y === py);
+        }
+        return !(p.x === x && p.y === y);
+      })
       .map((p) => {
         if (p.x === px && p.y === py) {
           return { ...p, x, y };
@@ -235,17 +267,32 @@ export default class Referee {
         return p;
       });
 
-    return !this.isKingInCheck(team, clonedBoard);
+    return !this.isKingInCheck(team, clonedBoard, moveHistory);
   }
 
-  getValidMovesCount(team: TeamType, boardState: Piece[]): number {
+  getValidMovesCount(
+    team: TeamType,
+    boardState: Piece[],
+    moveHistory: string[],
+  ): number {
     const myPieces = boardState.filter((p) => p.team === team);
     let moveCounts = 0;
 
     myPieces.forEach((p) => {
       for (let i = 7; i >= 0; i--) {
         for (let j = 0; j < 8; j++) {
-          if (this.isMoveLegal(p.x, p.y, j, i, p.role, p.team, boardState)) {
+          if (
+            this.isMoveLegal(
+              p.x,
+              p.y,
+              j,
+              i,
+              p.role,
+              p.team,
+              boardState,
+              moveHistory,
+            )
+          ) {
             moveCounts++;
           }
         }
@@ -263,5 +310,47 @@ export default class Referee {
       (piece.team === TeamType.OUR && toY === 7) ||
       (piece.team === TeamType.OPPONENT && toY === 0)
     );
+  }
+
+  canEnPassant(
+    px: number,
+    py: number,
+    x: number,
+    y: number,
+    team: TeamType,
+    boardState: Piece[],
+    moveHistory: string[],
+  ): boolean {
+    const pawnDirection = team === TeamType.OUR ? 1 : -1;
+
+    if (
+      Math.abs(x - px) === 1 &&
+      y - py === pawnDirection &&
+      !this.isOccupied(x, y, boardState)
+    ) {
+      const targetPawn = this.getPieceAt(x, py, boardState);
+
+      if (
+        targetPawn &&
+        targetPawn.role === PieceRole.Pawn &&
+        targetPawn.team !== team
+      ) {
+        const lastMove = moveHistory[moveHistory.length - 1];
+        if (!lastMove) return false;
+
+        const targetColumn = horizonAxis[x];
+        const targetRow = verticalAxis[py];
+        const expectedEndPos = `${targetColumn}${targetRow}`;
+
+        const isPawnMove = lastMove.includes("♙") || lastMove.includes("♟");
+
+        const isDoubleJump =
+          lastMove.includes(`${targetColumn}2${targetColumn}4`) ||
+          lastMove.includes(`${targetColumn}7${targetColumn}5`);
+
+        return lastMove.includes(expectedEndPos) && isPawnMove && isDoubleJump;
+      }
+    }
+    return false;
   }
 }
