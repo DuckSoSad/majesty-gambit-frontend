@@ -153,8 +153,7 @@ export default function Chessboard() {
             chosenPiece.y,
             col,
             row,
-            chosenPiece.role,
-            chosenPiece.team,
+            chosenPiece,
             pieces,
             moveHistory,
           )
@@ -176,8 +175,7 @@ export default function Chessboard() {
         selectedPiece.y,
         x,
         y,
-        selectedPiece.role,
-        selectedPiece.team,
+        selectedPiece,
         pieces,
         moveHistory,
       )

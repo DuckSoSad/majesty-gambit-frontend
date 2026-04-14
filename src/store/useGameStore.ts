@@ -41,24 +41,60 @@ export const useGameStore = create<GameState>((set) => ({
       const piece = state.pieces.find((p) => p.id === pieceId);
       if (!piece) return state;
 
-      const isEnPassant = referee.canEnPassant(
-        piece.x,
-        piece.y,
-        toX,
-        toY,
-        piece.team,
-        state.pieces,
-        state.moveHistory,
-      );
+      let isCastling = false;
+      let isEnPassant = false;
 
-      const targetPiece = isEnPassant ? state.pieces.find((p) => p.x === toX && p.y === piece.y) : state.pieces.find((p) => p.x === toX && p.y === toY);
+      switch (piece.role) {
+        case PieceRole.King:
+          isCastling = referee.canCastling(
+            piece.x,
+            piece.y,
+            toX,
+            toY,
+            pieceId,
+            piece.team,
+            state.pieces,
+            piece.hasMoved ?? false,
+            state.moveHistory,
+          );
+          break;
+
+        case PieceRole.Pawn:
+          isEnPassant = referee.canEnPassant(
+            piece.x,
+            piece.y,
+            toX,
+            toY,
+            piece.team,
+            state.pieces,
+            state.moveHistory,
+          );
+          break;
+      }
+
+      const targetPiece = isEnPassant
+        ? state.pieces.find((p) => p.x === toX && p.y === piece.y)
+        : state.pieces.find((p) => p.x === toX && p.y === toY);
+
+      const isKingSide = toX > piece.x;
+      const rookX = isKingSide ? 7 : 0;
+      const targetRookX = isKingSide ? 5 : 3;
 
       const newPieces = state.pieces.reduce((acc, p) => {
-        if (p.x === toX && p.y === toY && p.id !== pieceId) return acc;
-        if (p.id === pieceId) {
-          acc.push({ ...p, x: toX, y: toY });
-        } else if (targetPiece && p.id === targetPiece.id) {
+        if (targetPiece && p.id === targetPiece.id) {
           return acc;
+        }
+
+        if (p.id === pieceId) {
+          acc.push({ ...p, x: toX, y: toY, hasMoved: true });
+        } else if (
+          isCastling &&
+          p.role === PieceRole.Rook &&
+          p.x === rookX &&
+          p.y === piece.y &&
+          p.team === piece.team
+        ) {
+          acc.push({ ...p, x: targetRookX, hasMoved: true });
         } else {
           acc.push(p);
         }
@@ -93,7 +129,7 @@ export const useGameStore = create<GameState>((set) => ({
       const fromCoord = `${horizonAxis[piece.x]}${verticalAxis[piece.y]}`;
       const toCoord = `${horizonAxis[toX]}${verticalAxis[toY]}`;
       const actionChar = targetPiece ? "x" : "";
-      const moveNote = `${getPieceIcon(piece)}: ${fromCoord}${actionChar}${toCoord}${isKingInCheck && !isGameOver ? "+" : ""}${isKingInCheck && isGameOver ? "#" : ""}`;
+      const moveNote = isCastling ? (isKingSide ? `${getPieceIcon(piece)}: O-O` : `${getPieceIcon(piece)}: O-O-O`) : `${getPieceIcon(piece)}: ${fromCoord}${actionChar}${toCoord}${isKingInCheck && !isGameOver ? "+" : ""}${isKingInCheck && isGameOver ? "#" : ""}`;
 
       return {
         pieces: newPieces,

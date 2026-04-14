@@ -160,9 +160,28 @@ export default class Referee {
     py: number,
     x: number,
     y: number,
+    id: string,
     team: TeamType,
     boardState: Piece[],
+    hasMoved: boolean,
+    moveHistory: string[],
   ): boolean {
+    if (
+      this.canCastling(
+        px,
+        py,
+        x,
+        y,
+        id,
+        team,
+        boardState,
+        hasMoved,
+        moveHistory,
+      )
+    ) {
+      return true;
+    }
+
     if (Math.abs(x - px) <= 1 && Math.abs(y - py) <= 1) {
       const target = this.getPieceAt(x, y, boardState);
       return !target || target.team !== team;
@@ -175,34 +194,73 @@ export default class Referee {
     py: number,
     x: number,
     y: number,
-    role: PieceRole,
-    team: TeamType,
+    piece: Piece,
     boardState: Piece[],
     moveHistory: string[],
   ) {
     if (px === x && py === y) return false;
 
-    switch (role) {
+    switch (piece.role) {
       case PieceRole.Pawn:
-        return this.pawnMove(px, py, x, y, team, boardState, moveHistory);
+        return this.pawnMove(px, py, x, y, piece.team, boardState, moveHistory);
 
       case PieceRole.Knight:
-        return this.knightMove(px, py, x, y, team, boardState);
+        return this.knightMove(px, py, x, y, piece.team, boardState);
 
       case PieceRole.Rook:
-        return this.rookMove(px, py, x, y, team, boardState);
+        return this.rookMove(px, py, x, y, piece.team, boardState);
 
       case PieceRole.Bishop:
-        return this.bishopMove(px, py, x, y, team, boardState);
+        return this.bishopMove(px, py, x, y, piece.team, boardState);
 
       case PieceRole.King:
-        return this.kingMove(px, py, x, y, team, boardState);
+        return this.kingMove(
+          px,
+          py,
+          x,
+          y,
+          piece.id,
+          piece.team,
+          boardState,
+          piece.hasMoved ?? false,
+          moveHistory,
+        );
 
       case PieceRole.Queen:
         return (
-          this.rookMove(px, py, x, y, team, boardState) ||
-          this.bishopMove(px, py, x, y, team, boardState)
+          this.rookMove(px, py, x, y, piece.team, boardState) ||
+          this.bishopMove(px, py, x, y, piece.team, boardState)
         );
+
+      default:
+        return false;
+    }
+  }
+
+  private canCapture(
+    px: number,
+    py: number,
+    x: number,
+    y: number,
+    piece: Piece,
+    boardState: Piece[],
+    moveHistory: string[],
+  ): boolean {
+    switch (piece.role) {
+      case PieceRole.Pawn:
+        const pawnDirection = piece.team === TeamType.OUR ? 1 : -1;
+        return Math.abs(x - px) === 1 && y - py === pawnDirection;
+
+      case PieceRole.King:
+        return Math.abs(x - px) <= 1 && Math.abs(y - py) <= 1;
+
+      case PieceRole.Knight:
+        return this.knightMove(px, py, x, y, piece.team, boardState);
+
+      case PieceRole.Rook:
+      case PieceRole.Bishop:
+      case PieceRole.Queen:
+        return this.isValidMove(px, py, x, y, piece, boardState, moveHistory);
 
       default:
         return false;
@@ -224,16 +282,7 @@ export default class Referee {
     const enemyPieces = boardState.filter((p) => p.team !== team);
 
     return enemyPieces.some((p) =>
-      this.isValidMove(
-        p.x,
-        p.y,
-        king.x,
-        king.y,
-        p.role,
-        p.team,
-        boardState,
-        moveHistory,
-      ),
+      this.canCapture(p.x, p.y, king.x, king.y, p, boardState, moveHistory),
     );
   }
 
@@ -242,16 +291,17 @@ export default class Referee {
     py: number,
     x: number,
     y: number,
-    role: PieceRole,
-    team: TeamType,
+    piece: Piece,
     boardState: Piece[],
     moveHistory: string[],
   ): boolean {
-    if (!this.isValidMove(px, py, x, y, role, team, boardState, moveHistory))
+    if (!this.isValidMove(px, py, x, y, piece, boardState, moveHistory))
       return false;
 
     const isEnPassantMove =
-      role === PieceRole.Pawn && px !== x && !this.isOccupied(x, y, boardState);
+      piece.role === PieceRole.Pawn &&
+      px !== x &&
+      !this.isOccupied(x, y, boardState);
 
     const clonedBoard = boardState
       .filter((p) => {
@@ -267,7 +317,7 @@ export default class Referee {
         return p;
       });
 
-    return !this.isKingInCheck(team, clonedBoard, moveHistory);
+    return !this.isKingInCheck(piece.team, clonedBoard, moveHistory);
   }
 
   getValidMovesCount(
@@ -281,18 +331,7 @@ export default class Referee {
     myPieces.forEach((p) => {
       for (let i = 7; i >= 0; i--) {
         for (let j = 0; j < 8; j++) {
-          if (
-            this.isMoveLegal(
-              p.x,
-              p.y,
-              j,
-              i,
-              p.role,
-              p.team,
-              boardState,
-              moveHistory,
-            )
-          ) {
+          if (this.isMoveLegal(p.x, p.y, j, i, p, boardState, moveHistory)) {
             moveCounts++;
           }
         }
@@ -312,6 +351,7 @@ export default class Referee {
     );
   }
 
+  // en passant
   canEnPassant(
     px: number,
     py: number,
@@ -352,5 +392,52 @@ export default class Referee {
       }
     }
     return false;
+  }
+
+  canCastling(
+    px: number,
+    py: number,
+    x: number,
+    y: number,
+    id: string,
+    team: TeamType,
+    boardState: Piece[],
+    hasMoved: boolean,
+    moveHistory: string[],
+  ): boolean {
+    if (hasMoved) return false;
+
+    const isKingSide = x > px;
+    const rookX = isKingSide ? 7 : 0;
+
+    const targetRook = boardState.find(
+      (p) =>
+        p.role === PieceRole.Rook &&
+        p.team === team &&
+        p.x === rookX &&
+        p.y === py &&
+        !(p.hasMoved ?? false),
+    );
+
+    if (!targetRook) return false;
+
+    const start = Math.min(px, rookX);
+    const end = Math.max(px, rookX);
+    for (let i = start + 1; i < end; i++) {
+      if (this.isOccupied(i, py, boardState)) return false;
+    }
+
+    if (this.isKingInCheck(team, boardState, moveHistory)) return false;
+
+    const step = isKingSide ? 1 : -1;
+    const tempPieces = boardState.map((p) => {
+      if (p.id === id) {
+        return { ...p, x: px + step };
+      }
+      return p;
+    });
+    if (this.isKingInCheck(team, tempPieces, moveHistory)) return false;
+
+    return Math.abs(x - px) === 2 && y === py;
   }
 }

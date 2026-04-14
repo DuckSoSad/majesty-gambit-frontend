@@ -37,6 +37,7 @@ export type Piece = {
   y: number;
   role: PieceRole;
   team: TeamType;
+  hasMoved?: boolean;
 };
 
 export function getPieceImage(name: string, type: string) {
