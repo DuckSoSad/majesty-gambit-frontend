@@ -29,11 +29,11 @@ export default function MoveHistory() {
                 {index + 1}
               </div>
 
-              <div className="cursor-pointer px-3 py-2 border border-[#33364B] text-[#34384B] transition-colors">
+              <div className="text-start cursor-pointer px-3 py-2 border border-[#33364B] text-[#34384B] transition-colors">
                 {pair[0]}
               </div>
 
-              <div className="cursor-pointer px-3 py-2 border border-[#33364B] text-[#34384B] transition-colors">
+              <div className="text-start cursor-pointer px-3 py-2 border border-[#33364B] text-[#34384B] transition-colors">
                 {pair[1] || ""}
               </div>
             </div>
