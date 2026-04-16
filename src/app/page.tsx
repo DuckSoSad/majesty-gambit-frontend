@@ -1,8 +1,14 @@
+"use client"
+
 import Button from "@/components/Button";
 import Link from "next/link";
 import Image from "next/image";
+import GuidePopup from "@/components/GuidePopup";
+import { useGuide } from "@/hooks/useGuide";
 
 export default function Home() {
+  const { open } = useGuide();
+
   return (
     <div
       className="flex flex-col lg:flex-row min-h-screen items-center justify-center bg-[#302E2B] p-5 gap-10 font-sans
@@ -34,6 +40,13 @@ export default function Home() {
               ONLINE
             </button>
           </div>
+
+          <button
+            onClick={() => open(true)}
+            className="w-full bg-[#B1A7FC] hover:bg-[#9990EC] text-white text-2xl font-bold py-3 rounded-xl transition-all shadow-[0_5px_0_#8C82D9] active:shadow-none active:translate-y-1 cursor-pointer"
+          >
+            Hướng dẫn
+          </button>
         </div>
 
         <div className="pt-8 border-t border-zinc-700 w-full">
@@ -44,6 +57,8 @@ export default function Home() {
       </div>
 
       <div className="w-full max-w-[500px] lg:max-w-[700px] shadow-2xl rounded-lg overflow-hidden"></div>
+
+      <GuidePopup />
     </div>
   );
 }

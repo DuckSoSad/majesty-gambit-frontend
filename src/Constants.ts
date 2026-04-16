@@ -110,7 +110,7 @@ export default function createInitialPieces(): Piece[] {
       y: y,
     });
     pieces.push({
-     id: crypto.randomUUID(),
+      id: crypto.randomUUID(),
       image: getPieceImage("Rook", type),
       role: PieceRole.Rook,
       team: teamType,
@@ -140,3 +140,42 @@ export default function createInitialPieces(): Piece[] {
 
   return pieces;
 }
+
+export const TUTORIAL_DATA = [
+  {
+    title: "Chào mừng Kiện tướng!",
+    content:
+      "Chào mừng bạn đến với đấu trường trí tuệ! Mục tiêu của bạn là dồn quân Vua của đối phương vào thế không thể trốn thoát — gọi là Chiếu hết (Checkmate). Hãy cùng điểm qua những luật chơi từ cơ bản đến nâng cao nhé.",
+    icon: "👑",
+  },
+  {
+    title: "Cách di chuyển",
+    content:
+      "Rất đơn giản: Click vào quân cờ để kích hoạt gợi ý. Các chấm tím sẽ hiển thị tầm kiểm soát của quân đó. Bạn có thể kéo thả quân cờ hoặc chạm trực tiếp vào ô đích để thực hiện nước đi.",
+    icon: "🎯",
+  },
+  {
+    title: "Nhập thành (Castling)",
+    content:
+      "Nước đi đặc biệt giúp bảo vệ Vua và đưa Xe ra tham chiến nhanh chóng. Điều kiện: Vua và Xe chưa từng di chuyển, đường đi giữa chúng phải trống và Vua không được đang bị chiếu. Hãy di chuyển Vua 2 ô về phía Xe, quân Xe sẽ tự động nhảy qua để bảo vệ Vua.",
+    icon: "🛡️",
+  },
+  {
+    title: "Bắt tốt qua đường (En Passant)",
+    content:
+      "Đây là cái bẫy dành riêng cho quân Tốt! Nếu đối thủ vừa nhảy Tốt 2 ô từ vị trí xuất phát để đứng cạnh Tốt của bạn, bạn có thể ăn quân đó bằng cách di chuyển chéo vào ô mà họ vừa nhảy qua. Lưu ý: Bạn chỉ có thể thực hiện ngay lập tức sau khi đối thủ vừa đi nước đó.",
+    icon: "⚔️",
+  },
+  {
+    title: "Phong cấp (Promotion)",
+    content:
+      "Khi quân Tốt dũng cảm của bạn tiến đến được hàng cuối cùng phía đối diện, nó sẽ được 'Phong cấp'. Bạn có thể chọn biến nó thành Hậu, Xe, Tượng hoặc Mã. Hầu hết các kỳ thủ sẽ chọn Hậu để sở hữu sức mạnh tấn công lớn nhất!",
+    icon: "⬆️",
+  },
+  {
+    title: "Chiếu tướng & Kết thúc",
+    content:
+      "Khi Vua bị tấn công, bạn đang bị 'Chiếu'. Nếu không còn nước đi nào để cứu Vua, ván đấu sẽ kết thúc (Checkmate). Nếu bạn không bị chiếu nhưng cũng không còn nước đi hợp lệ nào, ván đấu sẽ hòa (Stalemate). Hãy tính toán thật kỹ!",
+    icon: "🏁",
+  },
+];

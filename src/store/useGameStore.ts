@@ -22,6 +22,15 @@ export interface GameState {
   makeMove: (pieceId: string, toX: number, toY: number) => void;
   promotePawn: (pieceId: string, role: PieceRole) => void;
   resetGame: () => void;
+
+  // for Guide
+  isOpenGuide: boolean;
+  guideStep: number;
+  openGuide: () => void;
+  closeGuide: () => void;
+  backStep: () => void;
+  nextStep: () => void;
+  setStep: (step: number) => void;
 }
 
 const referee = new Referee();
@@ -35,6 +44,14 @@ export const useGameStore = create<GameState>((set) => ({
   isCheck: false,
   isGameOver: false,
   winner: null,
+
+  isOpenGuide: false,
+  guideStep: 0,
+  openGuide: () => set({ isOpenGuide: true, guideStep: 0 }),
+  closeGuide: () => set({ isOpenGuide: false }),
+  backStep: () => set((state) => ({ guideStep: state.guideStep - 1 })),
+  nextStep: () => set((state) => ({ guideStep: state.guideStep + 1 })),
+  setStep: (step) => set({ guideStep: step }),
 
   makeMove: (pieceId, toX, toY) =>
     set((state) => {
@@ -129,7 +146,11 @@ export const useGameStore = create<GameState>((set) => ({
       const fromCoord = `${horizonAxis[piece.x]}${verticalAxis[piece.y]}`;
       const toCoord = `${horizonAxis[toX]}${verticalAxis[toY]}`;
       const actionChar = targetPiece ? "x" : "";
-      const moveNote = isCastling ? (isKingSide ? `${getPieceIcon(piece)}: O-O` : `${getPieceIcon(piece)}: O-O-O`) : `${getPieceIcon(piece)}: ${fromCoord}${actionChar}${toCoord}${isKingInCheck && !isGameOver ? "+" : ""}${isKingInCheck && isGameOver ? "#" : ""}`;
+      const moveNote = isCastling
+        ? isKingSide
+          ? `${getPieceIcon(piece)}: O-O`
+          : `${getPieceIcon(piece)}: O-O-O`
+        : `${getPieceIcon(piece)}: ${fromCoord}${actionChar}${toCoord}${isKingInCheck && !isGameOver ? "+" : ""}${isKingInCheck && isGameOver ? "#" : ""}`;
 
       return {
         pieces: newPieces,
