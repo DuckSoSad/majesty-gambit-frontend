@@ -20,7 +20,7 @@ export default function Page() {
 
   return (
     <div className="relative flex flex-col md:flex-row gap-5 min-h-screen items-center justify-center font-sans bg-[#F4F7FA] dark:bg-[#34364C]">
-      <div className="fixed top-4 left-2 md:left-4 z-40">
+      <div className="absolute top-4 left-2 md:left-4">
         <Link href="/">
           <button
             onClick={resetGame}
@@ -32,7 +32,7 @@ export default function Page() {
         </Link>
       </div>
 
-      <div className="fixed top-4 right-2 md:right-4 z-40">
+      <div className="absolute top-4 right-2 md:right-4">
         <button
           onClick={() => open(true)}
           className="p-2.5 bg-[#B1A7FC] text-white rounded-full shadow-lg shadow-[#B1A7FC]/30 active:scale-90 transition-all cursor-pointer"
@@ -41,7 +41,7 @@ export default function Page() {
         </button>
       </div>
 
-      <div className="mt-16 lg:mt-0 flex flex-col items-center gap-4 w-full max-w-fit">
+      <div className="mt-18 lg:mt-0 flex flex-col items-center gap-4 w-full max-w-fit">
         {" "}
         <div className="flex flex-col items-center gap-4">
           <Chessboard />
