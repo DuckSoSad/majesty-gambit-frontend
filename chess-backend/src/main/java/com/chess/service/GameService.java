@@ -1,0 +1,251 @@
+package com.chess.service;
+
+import com.chess.entity.*;
+import com.chess.repository.GameRepository;
+import com.chess.repository.MoveRepository;
+import com.chess.repository.RoomPlayerRepository;
+import com.chess.repository.RoomRepository;
+import com.chess.websocket.ChessGameState;
+import com.github.bhlangonijr.chesslib.Board;
+import com.github.bhlangonijr.chesslib.Piece;
+import com.github.bhlangonijr.chesslib.Side;
+import com.github.bhlangonijr.chesslib.Square;
+import com.github.bhlangonijr.chesslib.move.Move;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class GameService {
+
+    private final GameRepository gameRepository;
+    private final MoveRepository moveRepository;
+    private final RoomRepository roomRepository;
+    private final RoomPlayerRepository roomPlayerRepository;
+
+    public Game startGame(Room room) {
+        List<RoomPlayer> players = new ArrayList<>(roomPlayerRepository.findByRoomCode(room.getCode()));
+        if (players.size() < 2) throw new RuntimeException("Cần đủ 2 người chơi");
+
+        Collections.shuffle(players);
+        players.get(0).setColor(RoomPlayer.PieceColor.white);
+        players.get(1).setColor(RoomPlayer.PieceColor.black);
+        roomPlayerRepository.saveAll(players);
+
+        room.setStatus(Room.RoomStatus.in_progress);
+        room.setStartedAt(LocalDateTime.now());
+        roomRepository.save(room);
+
+        long timeMs = (long) room.getTimeLimitSeconds() * 1000L;
+        Game game = Game.builder()
+                .room(room)
+                .whitePlayer(players.get(0).getUser())
+                .blackPlayer(players.get(1).getUser())
+                .whiteTimeMs(timeMs)
+                .blackTimeMs(timeMs)
+                .build();
+        return gameRepository.save(game);
+    }
+
+    public ChessGameState processMove(Long gameId, String fromSq, String toSq,
+                                      String promotion, String username, int timeSpentMs) {
+        Game game = gameRepository.findByIdWithPlayers(gameId)
+                .orElseThrow(() -> new RuntimeException("Game không tồn tại"));
+
+        if (game.getResult() != null)
+            throw new RuntimeException("Game đã kết thúc");
+
+        Board board = new Board();
+        board.loadFromFen(game.getCurrentFen());
+
+        boolean isWhiteTurn = board.getSideToMove() == Side.WHITE;
+        User expected = isWhiteTurn ? game.getWhitePlayer() : game.getBlackPlayer();
+        if (!expected.getUsername().equals(username))
+            throw new RuntimeException("Không phải lượt của bạn");
+
+        // ===== Kiểm tra thời gian =====
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime reference = game.getLastMoveAt() != null ? game.getLastMoveAt() : game.getStartedAt();
+        long elapsedMs = Duration.between(reference, now).toMillis();
+
+        long remaining;
+        if (isWhiteTurn) {
+            remaining = game.getWhiteTimeMs() - elapsedMs;
+            game.setWhiteTimeMs(Math.max(0L, remaining));
+        } else {
+            remaining = game.getBlackTimeMs() - elapsedMs;
+            game.setBlackTimeMs(Math.max(0L, remaining));
+        }
+        game.setLastMoveAt(now);
+
+        if (remaining <= 0) {
+            Game.GameResult  gr = isWhiteTurn ? Game.GameResult.black_win : Game.GameResult.white_win;
+            Game.WinnerColor wc = isWhiteTurn ? Game.WinnerColor.black    : Game.WinnerColor.white;
+            game.setResult(gr); game.setWinnerColor(wc);
+            game.setEndReason(Game.EndReason.timeout);
+            game.setEndedAt(now);
+            gameRepository.save(game);
+            return ChessGameState.builder()
+                    .gameId(gameId)
+                    .fen(game.getCurrentFen())
+                    .result(gr.name())
+                    .endReason("timeout")
+                    .whiteTimeMs(game.getWhiteTimeMs())
+                    .blackTimeMs(game.getBlackTimeMs())
+                    .build();
+        }
+
+        // ===== Validate và thực hiện nước đi =====
+        Square from = Square.valueOf(fromSq.toUpperCase());
+        Square to   = Square.valueOf(toSq.toUpperCase());
+
+        Piece promoTo = Piece.NONE;
+        if (promotion != null && !promotion.isBlank())
+            promoTo = resolvePromotion(promotion, board.getSideToMove());
+
+        Move chessMove = new Move(from, to, promoTo);
+
+        if (!board.legalMoves().contains(chessMove))
+            throw new RuntimeException("Nước đi không hợp lệ");
+
+        Piece movedPiece = board.getPiece(from);
+        board.doMove(chessMove);
+
+        String newFen   = board.getFen();
+        boolean inCheck = board.isKingAttacked();
+        boolean noMoves = board.legalMoves().isEmpty();
+        boolean isMate  = inCheck  && noMoves;
+        boolean isStale = !inCheck && noMoves;
+
+        // ===== Lưu nước đi =====
+        int moveNum = moveRepository.countByGame(game) + 1;
+        com.chess.entity.Move record = com.chess.entity.Move.builder()
+                .game(game)
+                .moveNumber(moveNum)
+                .playerColor(isWhiteTurn ? RoomPlayer.PieceColor.white : RoomPlayer.PieceColor.black)
+                .fromSquare(fromSq.toLowerCase())
+                .toSquare(toSq.toLowerCase())
+                .piece(toPieceChar(movedPiece))
+                .promotion(promotion)
+                .fenAfter(newFen)
+                .timeSpentMs((int) elapsedMs)
+                .build();
+        moveRepository.save(record);
+
+        // ===== Cập nhật game =====
+        game.setCurrentFen(newFen);
+
+        String result    = null;
+        String endReason = null;
+        if (isMate) {
+            Game.GameResult  gr = isWhiteTurn ? Game.GameResult.white_win : Game.GameResult.black_win;
+            Game.WinnerColor wc = isWhiteTurn ? Game.WinnerColor.white    : Game.WinnerColor.black;
+            result = gr.name(); endReason = "checkmate";
+            game.setResult(gr); game.setWinnerColor(wc);
+            game.setEndReason(Game.EndReason.checkmate);
+            game.setEndedAt(now);
+        } else if (isStale) {
+            result = "draw"; endReason = "stalemate";
+            game.setResult(Game.GameResult.draw);
+            game.setEndReason(Game.EndReason.stalemate);
+            game.setEndedAt(now);
+        }
+        gameRepository.save(game);
+
+        return ChessGameState.builder()
+                .gameId(gameId)
+                .fen(newFen)
+                .lastMove(fromSq.toLowerCase() + toSq.toLowerCase())
+                .currentTurn(isWhiteTurn ? "black" : "white")
+                .isCheck(inCheck)
+                .isCheckmate(isMate)
+                .isStalemate(isStale)
+                .result(result)
+                .endReason(endReason)
+                .whiteTimeMs(game.getWhiteTimeMs())
+                .blackTimeMs(game.getBlackTimeMs())
+                .build();
+    }
+
+    public ChessGameState resign(Long gameId, String username) {
+        Game game = gameRepository.findByIdWithPlayers(gameId)
+                .orElseThrow(() -> new RuntimeException("Game không tồn tại"));
+
+        if (game.getResult() != null)
+            throw new RuntimeException("Game đã kết thúc");
+
+        boolean resigningWhite = game.getWhitePlayer().getUsername().equals(username);
+        Game.GameResult  gr = resigningWhite ? Game.GameResult.black_win : Game.GameResult.white_win;
+        Game.WinnerColor wc = resigningWhite ? Game.WinnerColor.black    : Game.WinnerColor.white;
+        game.setResult(gr); game.setWinnerColor(wc);
+        game.setEndReason(Game.EndReason.resign);
+        game.setEndedAt(LocalDateTime.now());
+        gameRepository.save(game);
+
+        return ChessGameState.builder()
+                .gameId(gameId)
+                .fen(game.getCurrentFen())
+                .result(gr.name())
+                .endReason("resign")
+                .whiteTimeMs(game.getWhiteTimeMs())
+                .blackTimeMs(game.getBlackTimeMs())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public ChessGameState getGameState(Long gameId) {
+        Game game = gameRepository.findByIdWithPlayers(gameId)
+                .orElseThrow(() -> new RuntimeException("Game không tồn tại"));
+
+        Board board = new Board();
+        board.loadFromFen(game.getCurrentFen());
+
+        boolean inCheck = board.isKingAttacked();
+        boolean noMoves = board.legalMoves().isEmpty();
+        return ChessGameState.builder()
+                .gameId(gameId)
+                .fen(game.getCurrentFen())
+                .currentTurn(board.getSideToMove() == Side.WHITE ? "white" : "black")
+                .isCheck(inCheck)
+                .isCheckmate(inCheck  && noMoves)
+                .isStalemate(!inCheck && noMoves)
+                .result(game.getResult()    != null ? game.getResult().name()    : null)
+                .endReason(game.getEndReason() != null ? game.getEndReason().name() : null)
+                .whiteUsername(game.getWhitePlayer().getUsername())
+                .blackUsername(game.getBlackPlayer().getUsername())
+                .whiteTimeMs(game.getWhiteTimeMs())
+                .blackTimeMs(game.getBlackTimeMs())
+                .build();
+    }
+
+    private Piece resolvePromotion(String promo, Side side) {
+        return switch (promo.toUpperCase()) {
+            case "Q" -> side == Side.WHITE ? Piece.WHITE_QUEEN  : Piece.BLACK_QUEEN;
+            case "R" -> side == Side.WHITE ? Piece.WHITE_ROOK   : Piece.BLACK_ROOK;
+            case "B" -> side == Side.WHITE ? Piece.WHITE_BISHOP : Piece.BLACK_BISHOP;
+            case "N" -> side == Side.WHITE ? Piece.WHITE_KNIGHT : Piece.BLACK_KNIGHT;
+            default  -> side == Side.WHITE ? Piece.WHITE_QUEEN  : Piece.BLACK_QUEEN;
+        };
+    }
+
+    private String toPieceChar(Piece piece) {
+        if (piece == null || piece == Piece.NONE) return "?";
+        return switch (piece.getPieceType()) {
+            case PAWN   -> "P";
+            case KNIGHT -> "N";
+            case BISHOP -> "B";
+            case ROOK   -> "R";
+            case QUEEN  -> "Q";
+            case KING   -> "K";
+            default     -> "?";
+        };
+    }
+}

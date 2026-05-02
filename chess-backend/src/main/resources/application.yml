@@ -1,0 +1,45 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: chess-backend
+
+  # ===== SQL SERVER =====
+  datasource:
+    url: jdbc:sqlserver://sso.d2s.com.vn:2025;databaseName=ChessApp;encrypt=true;trustServerCertificate=true
+    username: chess
+    password: chess@123
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+
+  # ===== JPA =====
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.SQLServerDialect
+        format_sql: true
+
+  # ===== JACKSON =====
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: UTC
+
+# ===== JWT =====
+app:
+  jwt:
+    secret: chess-app-super-secret-key-must-be-at-least-256-bits-long-for-hs256
+    access-token-expiration: 900000
+    refresh-token-expiration: 604800000
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+      - http://localhost:5173
+
+# ===== LOGGING =====
+logging:
+  level:
+    com.chess: DEBUG
+    org.springframework.web.socket: DEBUG
