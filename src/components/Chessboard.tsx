@@ -1,33 +1,17 @@
 "use client";
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Cell from "./Cell";
 import CellColor from "./CellColor";
-
 import {
-  DragEndEvent,
-  DragStartEvent,
-  DragOverEvent,
-  DndContext,
-  DragOverlay,
-  useSensors,
-  TouchSensor,
-  useSensor,
-  MouseSensor,
-  Modifier,
+  DragEndEvent, DragStartEvent, DragOverEvent, DndContext, DragOverlay,
+  useSensors, TouchSensor, useSensor, MouseSensor, Modifier,
 } from "@dnd-kit/core";
 import DraggablePiece from "./DraggablePiece";
 import Image from "next/image";
 import Referee from "@/utils/Referee";
-import createInitialPieces, { Piece, PieceRole, TeamType } from "@/Constants";
+import { Piece, PieceRole, TeamType } from "@/Constants";
 import { useGameStore } from "@/store/useGameStore";
-import { toast } from "react-toastify";
 import { useChessSounds } from "@/hooks/useChessSound";
 import IsCheckmatePopup from "./IsCheckmatePopup";
 import PromotionPopup from "./PromotionPopup";
@@ -35,214 +19,202 @@ import PromotionPopup from "./PromotionPopup";
 const verticalAxis = [1, 2, 3, 4, 5, 6, 7, 8];
 const horizonAxis = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
-export default function Chessboard() {
+// PieceRole → promotion char gửi lên server
+const ROLE_TO_PROMO: Record<number, string> = {
+  [PieceRole.Bishop]: "B",
+  [PieceRole.Knight]: "N",
+  [PieceRole.Queen]: "Q",
+  [PieceRole.Rook]: "R",
+};
+
+interface ChessboardProps {
+  // Online mode props
+  onlineMode?: boolean;
+  myColor?: "white" | "black";
+  externalPieces?: Piece[];
+  onlineTurn?: "white" | "black";
+  onMove?: (from: string, to: string, promotion?: string) => void;
+  gameOver?: boolean;
+}
+
+export default function Chessboard({
+  onlineMode = false,
+  myColor = "white",
+  externalPieces,
+  onlineTurn,
+  onMove,
+  gameOver = false,
+}: ChessboardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const referee = useMemo(() => new Referee(), []);
 
-  const restrictToBoard: Modifier = useCallback(
-    ({ transform, draggingNodeRect }) => {
-      if (!boardRef.current || !draggingNodeRect) return transform;
-
-      const boardRect = boardRef.current.getBoundingClientRect();
-
-      const minX = boardRect.left - draggingNodeRect.left;
-      const maxX = boardRect.right - draggingNodeRect.right;
-      const minY = boardRect.top - draggingNodeRect.top;
-      const maxY = boardRect.bottom - draggingNodeRect.bottom;
-
-      return {
-        ...transform,
-        x: Math.min(Math.max(transform.x, minX), maxX),
-        y: Math.min(Math.max(transform.y, minY), maxY),
-      };
-    },
-    [],
-  );
+  const restrictToBoard: Modifier = useCallback(({ transform, draggingNodeRect }) => {
+    if (!boardRef.current || !draggingNodeRect) return transform;
+    const r = boardRef.current.getBoundingClientRect();
+    return {
+      ...transform,
+      x: Math.min(Math.max(transform.x, r.left - draggingNodeRect.left), r.right - draggingNodeRect.right),
+      y: Math.min(Math.max(transform.y, r.top - draggingNodeRect.top), r.bottom - draggingNodeRect.bottom),
+    };
+  }, []);
 
   const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: {
-        distance: 3,
-      },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 200,
-        tolerance: 6,
-      },
-    }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
   );
 
-  const { playGameStart, playMove, playMoveCheck, playCapture } =
-    useChessSounds();
+  const { playGameStart, playMove, playMoveCheck, playCapture } = useChessSounds();
 
-  const pieces = useGameStore((state) => state.pieces);
-  const currentTurn = useGameStore((state) => state.currentTurn);
+  // Store state (local mode)
+  const storePieces   = useGameStore((s) => s.pieces);
+  const currentTurn   = useGameStore((s) => s.currentTurn);
+  const makeMove      = useGameStore((s) => s.makeMove);
+  const promotePawn   = useGameStore((s) => s.promotePawn);
+  const isGameOver    = useGameStore((s) => s.isGameOver);
+  const isCheck       = useGameStore((s) => s.isCheck);
+  const moveHistory   = useGameStore((s) => s.moveHistory);
 
-  const makeMove = useGameStore((state) => state.makeMove);
-  const promotePawn = useGameStore((state) => state.promotePawn);
+  // Use external pieces in online mode
+  const pieces = onlineMode ? (externalPieces ?? []) : storePieces;
+
+  const myTeam = myColor === "white" ? TeamType.OUR : TeamType.OPPONENT;
+  const isMyTurn = onlineTurn === myColor;
 
   const [selectedPiece, setSelectedPiece] = useState<Piece | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId]           = useState<string | null>(null);
   const [hoveredCellId, setHoveredCellId] = useState<string | null>(null);
-
-  const isGameOver = useGameStore((state) => state.isGameOver);
-  const isCheck = useGameStore((state) => state.isCheck);
-  const moveHistory = useGameStore((state) => state.moveHistory);
-
   const [pendingPromotion, setPendingPromotion] = useState<{
-    id: string;
-    x: number;
-    y: number;
+    id: string; x: number; y: number; fromAlg?: string; toAlg?: string;
   } | null>(null);
+  const [isCheckmate, setIsCheckmate] = useState(false);
 
   useEffect(() => {
     if (moveHistory.length !== 0) return;
-    playGameStart();
+    if (!onlineMode) playGameStart();
   }, [moveHistory.length]);
 
   useEffect(() => {
-    if (moveHistory.length === 0) return;
-
-    const lastMove = moveHistory[moveHistory.length - 1];
-    const isCapture = lastMove.includes("x");
-
-    if (isCheck) {
-      playMoveCheck();
-    } else if (isCapture) {
-      playCapture();
-    } else {
-      playMove();
-    }
+    if (onlineMode || moveHistory.length === 0) return;
+    const last = moveHistory[moveHistory.length - 1];
+    if (isCheck) playMoveCheck();
+    else if (last.includes("x")) playCapture();
+    else playMove();
   }, [moveHistory, isCheck]);
 
-  const [isCheckmate, setIsCheckmate] = useState<boolean>(false);
-
   useEffect(() => {
-    if (isGameOver) {
-      setIsCheckmate(true);
-    }
+    if (!onlineMode && isGameOver) setIsCheckmate(true);
   }, [isGameOver]);
 
   const pieceMap = useMemo(() => {
-    const map = new Map<string, Piece>();
-    pieces.forEach((p) => map.set(`${p.x},${p.y}`, p));
-
-    return map;
+    const m = new Map<string, Piece>();
+    pieces.forEach((p) => m.set(`${p.x},${p.y}`, p));
+    return m;
   }, [pieces]);
 
-  const activePiece = useMemo(
-    () => pieces.find((p) => p.id === activeId) ?? null,
-    [pieces, activeId],
-  );
+  const activePiece = useMemo(() => pieces.find((p) => p.id === activeId) ?? null, [pieces, activeId]);
 
   const validMoves = useMemo(() => {
     if (!selectedPiece && !activeId) return [];
+    const chosen = pieces.find((p) => selectedPiece ? p.id === selectedPiece.id : p.id === activeId);
+    if (!chosen) return [];
+
+    if (onlineMode) {
+      if (chosen.team !== myTeam || !isMyTurn) return [];
+    } else {
+      if (chosen.team !== currentTurn) return [];
+    }
+
     const moves: string[] = [];
-
-    const chosenPiece = pieces.find((p) =>
-      selectedPiece ? p.id === selectedPiece.id : p.id === activeId,
-    );
-    if (!chosenPiece || chosenPiece.team !== currentTurn) return [];
-
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
-        if (
-          referee.isMoveLegal(
-            chosenPiece.x,
-            chosenPiece.y,
-            col,
-            row,
-            chosenPiece,
-            pieces,
-            moveHistory,
-          )
-        ) {
+        if (referee.isMoveLegal(chosen.x, chosen.y, col, row, chosen, pieces, moveHistory)) {
           moves.push(`${col},${row}`);
         }
       }
     }
-
     return moves;
-  }, [pieces, selectedPiece, activeId, referee]);
+  }, [pieces, selectedPiece, activeId, onlineMode, isMyTurn, currentTurn]);
 
-  function checkBeforeMove(x: number, y: number, selectedPiece: Piece | null) {
-    if (!selectedPiece) return;
+  function toAlg(x: number, y: number) {
+    return `${horizonAxis[x]}${verticalAxis[y]}`;
+  }
 
-    if (
-      referee.isMoveLegal(
-        selectedPiece.x,
-        selectedPiece.y,
-        x,
-        y,
-        selectedPiece,
-        pieces,
-        moveHistory,
-      )
-    ) {
-      if (referee.isPromotionMove(y, selectedPiece)) {
-        setPendingPromotion({ id: selectedPiece.id, x, y });
+  function checkBeforeMove(x: number, y: number, sel: Piece | null) {
+    if (!sel) return;
+    if (!referee.isMoveLegal(sel.x, sel.y, x, y, sel, pieces, moveHistory)) return;
+
+    if (onlineMode) {
+      const from = toAlg(sel.x, sel.y);
+      const to   = toAlg(x, y);
+      if (referee.isPromotionMove(y, sel)) {
+        setPendingPromotion({ id: sel.id, x, y, fromAlg: from, toAlg: to });
         return;
       }
-      makeMove(selectedPiece.id, x, y);
-      // toast.info(`It's ${currentTurn === 0 ? "your" : "opponent's"} turn`);
+      onMove?.(from, to);
+    } else {
+      if (referee.isPromotionMove(y, sel)) {
+        setPendingPromotion({ id: sel.id, x, y });
+        return;
+      }
+      makeMove(sel.id, x, y);
     }
   }
 
   const handlePromotionSelect = (role: PieceRole) => {
-    if (pendingPromotion) {
+    if (!pendingPromotion) return;
+    if (onlineMode && pendingPromotion.fromAlg) {
+      onMove?.(pendingPromotion.fromAlg, pendingPromotion.toAlg!, ROLE_TO_PROMO[role]);
+    } else {
       promotePawn(pendingPromotion.id, role);
       makeMove(pendingPromotion.id, pendingPromotion.x, pendingPromotion.y);
-
       playMove();
-
-      setPendingPromotion(null);
     }
+    setPendingPromotion(null);
   };
 
-  const pickPiece = useCallback(
-    (x: number, y: number) => {
-      if (activeId) return;
-      const piece = pieces.find((p) => p.x === x && p.y === y);
+  const pickPiece = useCallback((x: number, y: number) => {
+    if (activeId) return;
+    const piece = pieces.find((p) => p.x === x && p.y === y);
 
+    if (onlineMode) {
       if (!selectedPiece && piece) {
-        if (piece.team === currentTurn) {
-          setSelectedPiece(piece);
-        }
+        if (piece.team === myTeam && isMyTurn) setSelectedPiece(piece);
         return;
       }
-
       checkBeforeMove(x, y, selectedPiece);
       setSelectedPiece(null);
-    },
-    [pieces, selectedPiece, activeId],
-  );
+    } else {
+      if (!selectedPiece && piece) {
+        if (piece.team === currentTurn) setSelectedPiece(piece);
+        return;
+      }
+      checkBeforeMove(x, y, selectedPiece);
+      setSelectedPiece(null);
+    }
+  }, [pieces, selectedPiece, activeId, isMyTurn, currentTurn]);
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(event.active.id as string);
+  function handleDragStart(e: DragStartEvent) {
+    setActiveId(e.active.id as string);
     setSelectedPiece(null);
   }
 
-  function handleDragOver(event: DragOverEvent) {
-    setHoveredCellId(event.over ? (event.over.id as string) : null);
+  function handleDragOver(e: DragOverEvent) {
+    setHoveredCellId(e.over ? (e.over.id as string) : null);
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
     setActiveId(null);
     setHoveredCellId(null);
-
     if (!over?.data?.current) return;
 
-    const pieceId = active.id as string;
-    const selectedPiece = pieces.find((p) => p.id === pieceId);
-
-    if (!selectedPiece || selectedPiece.team !== currentTurn) return;
+    const piece = pieces.find((p) => p.id === active.id);
+    if (!piece) return;
+    if (onlineMode && (piece.team !== myTeam || !isMyTurn)) return;
+    if (!onlineMode && piece.team !== currentTurn) return;
 
     const { x, y } = over.data.current as { x: number; y: number };
-
-    checkBeforeMove(x, y, selectedPiece);
+    checkBeforeMove(x, y, piece);
   }
 
   function handleDragCancel() {
@@ -250,58 +222,47 @@ export default function Chessboard() {
     setHoveredCellId(null);
   }
 
-  let board = [];
+  // Board is flipped for black player in online mode
+  const flip = onlineMode && myColor === "black";
 
+  const board = [];
   for (let i = 7; i >= 0; i--) {
     for (let j = 0; j < 8; j++) {
-      const isBlack = (i + j) % 2 === 0;
-
-      const piece = pieceMap.get(`${j},${i}`);
-      const isSelected = selectedPiece?.x === j && selectedPiece?.y === i;
-      const isHovered = hoveredCellId === `${j},${i}`;
+      const row = flip ? 7 - i : i;
+      const col = flip ? 7 - j : j;
+      const isBlack    = (row + col) % 2 === 0;
+      const piece      = pieceMap.get(`${col},${row}`);
+      const isSelected = selectedPiece?.x === col && selectedPiece?.y === row;
+      const isHovered  = hoveredCellId === `${col},${row}`;
 
       board.push(
-        <Cell key={`${i},${j}`} x={j} y={i} pick={pickPiece}>
+        <Cell key={`${row},${col}`} x={col} y={row} pick={pickPiece}>
           <div className="w-full h-full">
             <CellColor isBlack={isBlack} />
-
-            {j === 0 && (
-              <span
-                className={`absolute top-0.5 left-0.5 text-[10px] font-bold md:text-xs 
-          ${isBlack ? "text-[#E8EDF9]" : "text-[#B7C0D8]"}`}
-              >
-                {i + 1}
+            {col === 0 && (
+              <span className={`absolute top-0.5 left-0.5 text-[10px] font-bold md:text-xs ${isBlack ? "text-[#E8EDF9]" : "text-[#B7C0D8]"}`}>
+                {row + 1}
               </span>
             )}
-
-            {i === 0 && (
-              <span
-                className={`absolute bottom-0.5 right-0.5 text-[10px] uppercase font-bold md:text-xs 
-          ${isBlack ? "text-[#E8EDF9]" : "text-[#B7C0D8]"}`}
-              >
-                {horizonAxis[j]}
+            {row === 0 && (
+              <span className={`absolute bottom-0.5 right-0.5 text-[10px] uppercase font-bold md:text-xs ${isBlack ? "text-[#E8EDF9]" : "text-[#B7C0D8]"}`}>
+                {horizonAxis[col]}
               </span>
             )}
-
-            {validMoves.includes(`${j},${i}`) && (
+            {validMoves.includes(`${col},${row}`) && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                {pieceMap.has(`${j},${i}`) ? (
+                {pieceMap.has(`${col},${row}`) ? (
                   <div className="w-full h-full border-5 border-[#9990EC] opacity-90 rounded-full" />
                 ) : (
                   <div className="w-5 h-5 md:w-7 md:h-7 bg-[#9990EC] opacity-90 rounded-full" />
                 )}
               </div>
             )}
-
-            {isSelected && (
-              <div className="absolute inset-0 border-4 bg-[#B1A7FC] opacity-70 pointer-events-none" />
-            )}
-            {isHovered && !isSelected && (
-              <div className="absolute inset-0 border-4 bg-[#B1A7FC] opacity-70 pointer-events-none" />
-            )}
+            {isSelected && <div className="absolute inset-0 border-4 bg-[#B1A7FC] opacity-70 pointer-events-none" />}
+            {isHovered && !isSelected && <div className="absolute inset-0 border-4 bg-[#B1A7FC] opacity-70 pointer-events-none" />}
             {piece && <DraggablePiece id={piece.id} image={piece.image} />}
           </div>
-        </Cell>,
+        </Cell>
       );
     }
   }
@@ -320,33 +281,21 @@ export default function Chessboard() {
         onDragCancel={handleDragCancel}
       >
         {board}
-        <DragOverlay
-          dropAnimation={{
-            duration: 150,
-            easing: "cubic-bezier(0.2, 0, 0, 1)",
-          }}
-        >
+        <DragOverlay dropAnimation={{ duration: 150, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
           {activePiece ? (
             <div className="relative w-full h-full opacity-95 drop-shadow-2xl">
-              <Image
-                src={activePiece.image}
-                alt="dragging piece"
-                fill
-                sizes="80px"
-                className="object-contain pointer-events-none select-none"
-                priority
-              />
+              <Image src={activePiece.image} alt="dragging" fill sizes="80px" className="object-contain pointer-events-none select-none" priority />
             </div>
           ) : null}
         </DragOverlay>
       </DndContext>
 
-      {isCheckmate && (
-        <IsCheckmatePopup restart={() => setIsCheckmate(false)} />
-      )}
-
+      {!onlineMode && isCheckmate && <IsCheckmatePopup restart={() => setIsCheckmate(false)} />}
       {pendingPromotion && (
-        <PromotionPopup team={currentTurn} onSelect={handlePromotionSelect} />
+        <PromotionPopup
+          team={onlineMode ? (myColor === "white" ? TeamType.OUR : TeamType.OPPONENT) : currentTurn}
+          onSelect={handlePromotionSelect}
+        />
       )}
     </div>
   );
