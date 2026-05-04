@@ -2,6 +2,7 @@ export interface ChessGameState {
   gameId: number;
   fen: string;
   lastMove?: string;
+  moveHistory?: string[];
   currentTurn: "white" | "black";
   isCheck: boolean;
   isCheckmate: boolean;

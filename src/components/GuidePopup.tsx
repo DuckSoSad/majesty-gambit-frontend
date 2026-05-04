@@ -5,12 +5,11 @@ import { useGuide } from "@/hooks/useGuide";
 import { useGameStore } from "@/store/useGameStore";
 
 export default function GuidePopup() {
-  const { open, close } = useGuide();
+  const { close } = useGuide();
 
   const isOpen = useGameStore((state) => state.isOpenGuide);
   const step = useGameStore((state) => state.guideStep);
   const nextStep = useGameStore((state) => state.nextStep);
-  const closeGuide = useGameStore((state) => state.closeGuide);
 
   if (!isOpen) return null;
 
@@ -18,7 +17,7 @@ export default function GuidePopup() {
   const isLastStep = step === TUTORIAL_DATA.length - 1;
 
   return (
-    <div className="fixed z-[100] inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+    <div className="fixed z-100 inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
       <div className="bg-[#B1A7FC] w-full max-w-md rounded-3xl shadow-[0_20px_50px_rgba(177,167,252,0.3)] overflow-hidden animate-in fade-in zoom-in duration-300">
         <div className="bg-white/10 pt-8 pb-6 flex justify-center">
           <span className="text-6xl animate-bounce">{currentData.icon}</span>
@@ -29,7 +28,7 @@ export default function GuidePopup() {
             {currentData.title}
           </h3>
 
-          <div className="min-h-[100px] flex items-center justify-center">
+          <div className="min-h-25 flex items-center justify-center">
             <p className="text-white/90 leading-relaxed font-medium">
               {currentData.content}
             </p>

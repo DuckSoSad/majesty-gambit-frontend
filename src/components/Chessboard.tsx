@@ -18,6 +18,8 @@ import PromotionPopup from "./PromotionPopup";
 
 const verticalAxis = [1, 2, 3, 4, 5, 6, 7, 8];
 const horizonAxis = ["a", "b", "c", "d", "e", "f", "g", "h"];
+const EMPTY_PIECES: Piece[] = [];
+const EMPTY_MOVE_HISTORY: string[] = [];
 
 // PieceRole → promotion char gửi lên server
 const ROLE_TO_PROMO: Record<number, string> = {
@@ -32,6 +34,7 @@ interface ChessboardProps {
   onlineMode?: boolean;
   myColor?: "white" | "black";
   externalPieces?: Piece[];
+  externalMoveHistory?: string[];
   onlineTurn?: "white" | "black";
   onMove?: (from: string, to: string, promotion?: string) => void;
   gameOver?: boolean;
@@ -41,6 +44,7 @@ export default function Chessboard({
   onlineMode = false,
   myColor = "white",
   externalPieces,
+  externalMoveHistory,
   onlineTurn,
   onMove,
   gameOver = false,
@@ -75,10 +79,18 @@ export default function Chessboard({
   const moveHistory   = useGameStore((s) => s.moveHistory);
 
   // Use external pieces in online mode
-  const pieces = onlineMode ? (externalPieces ?? []) : storePieces;
+  const pieces = useMemo(
+    () => (onlineMode ? (externalPieces ?? EMPTY_PIECES) : storePieces),
+    [externalPieces, onlineMode, storePieces],
+  );
+  const ruleMoveHistory = useMemo(
+    () => (onlineMode ? (externalMoveHistory ?? EMPTY_MOVE_HISTORY) : moveHistory),
+    [externalMoveHistory, onlineMode, moveHistory],
+  );
 
   const myTeam = myColor === "white" ? TeamType.OUR : TeamType.OPPONENT;
   const isMyTurn = onlineTurn === myColor;
+  const boardLocked = onlineMode ? gameOver : isGameOver;
 
   const [selectedPiece, setSelectedPiece] = useState<Piece | null>(null);
   const [activeId, setActiveId]           = useState<string | null>(null);
@@ -86,12 +98,10 @@ export default function Chessboard({
   const [pendingPromotion, setPendingPromotion] = useState<{
     id: string; x: number; y: number; fromAlg?: string; toAlg?: string;
   } | null>(null);
-  const [isCheckmate, setIsCheckmate] = useState(false);
-
   useEffect(() => {
     if (moveHistory.length !== 0) return;
     if (!onlineMode) playGameStart();
-  }, [moveHistory.length]);
+  }, [moveHistory.length, onlineMode, playGameStart]);
 
   useEffect(() => {
     if (onlineMode || moveHistory.length === 0) return;
@@ -99,11 +109,7 @@ export default function Chessboard({
     if (isCheck) playMoveCheck();
     else if (last.includes("x")) playCapture();
     else playMove();
-  }, [moveHistory, isCheck]);
-
-  useEffect(() => {
-    if (!onlineMode && isGameOver) setIsCheckmate(true);
-  }, [isGameOver]);
+  }, [moveHistory, isCheck, onlineMode, playCapture, playMove, playMoveCheck]);
 
   const pieceMap = useMemo(() => {
     const m = new Map<string, Piece>();
@@ -114,6 +120,7 @@ export default function Chessboard({
   const activePiece = useMemo(() => pieces.find((p) => p.id === activeId) ?? null, [pieces, activeId]);
 
   const validMoves = useMemo(() => {
+    if (boardLocked) return [];
     if (!selectedPiece && !activeId) return [];
     const chosen = pieces.find((p) => selectedPiece ? p.id === selectedPiece.id : p.id === activeId);
     if (!chosen) return [];
@@ -127,21 +134,22 @@ export default function Chessboard({
     const moves: string[] = [];
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
-        if (referee.isMoveLegal(chosen.x, chosen.y, col, row, chosen, pieces, moveHistory)) {
+        if (referee.isMoveLegal(chosen.x, chosen.y, col, row, chosen, pieces, ruleMoveHistory)) {
           moves.push(`${col},${row}`);
         }
       }
     }
     return moves;
-  }, [pieces, selectedPiece, activeId, onlineMode, isMyTurn, currentTurn]);
+  }, [pieces, selectedPiece, activeId, onlineMode, isMyTurn, currentTurn, ruleMoveHistory, boardLocked, myTeam, referee]);
 
   function toAlg(x: number, y: number) {
     return `${horizonAxis[x]}${verticalAxis[y]}`;
   }
 
   function checkBeforeMove(x: number, y: number, sel: Piece | null) {
+    if (boardLocked) return;
     if (!sel) return;
-    if (!referee.isMoveLegal(sel.x, sel.y, x, y, sel, pieces, moveHistory)) return;
+    if (!referee.isMoveLegal(sel.x, sel.y, x, y, sel, pieces, ruleMoveHistory)) return;
 
     if (onlineMode) {
       const from = toAlg(sel.x, sel.y);
@@ -172,7 +180,7 @@ export default function Chessboard({
     setPendingPromotion(null);
   };
 
-  const pickPiece = useCallback((x: number, y: number) => {
+  function pickPiece(x: number, y: number) {
     if (activeId) return;
     const piece = pieces.find((p) => p.x === x && p.y === y);
 
@@ -191,7 +199,7 @@ export default function Chessboard({
       checkBeforeMove(x, y, selectedPiece);
       setSelectedPiece(null);
     }
-  }, [pieces, selectedPiece, activeId, isMyTurn, currentTurn]);
+  }
 
   function handleDragStart(e: DragStartEvent) {
     setActiveId(e.active.id as string);
@@ -210,6 +218,7 @@ export default function Chessboard({
 
     const piece = pieces.find((p) => p.id === active.id);
     if (!piece) return;
+    if (boardLocked) return;
     if (onlineMode && (piece.team !== myTeam || !isMyTurn)) return;
     if (!onlineMode && piece.team !== currentTurn) return;
 
@@ -270,7 +279,7 @@ export default function Chessboard({
   return (
     <div
       ref={boardRef}
-      className="w-[95vw] h-[95vw] md:w-200 md:h-200 bg-white grid grid-cols-8 grid-rows-8 shadow-2xl border-3 border-white"
+      className="w-[95vw] h-[95vw] md:w-190 md:h-190 bg-white grid grid-cols-8 grid-rows-8 shadow-2xl border-3 border-white"
     >
       <DndContext
         sensors={sensors}
@@ -290,7 +299,7 @@ export default function Chessboard({
         </DragOverlay>
       </DndContext>
 
-      {!onlineMode && isCheckmate && <IsCheckmatePopup restart={() => setIsCheckmate(false)} />}
+      {!onlineMode && isGameOver && <IsCheckmatePopup restart={() => undefined} />}
       {pendingPromotion && (
         <PromotionPopup
           team={onlineMode ? (myColor === "white" ? TeamType.OUR : TeamType.OPPONENT) : currentTurn}

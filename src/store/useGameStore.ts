@@ -45,6 +45,7 @@ export const useGameStore = create<GameState>((set) => ({
   isGameOver: false,
   winner: null,
 
+  // for Guide Popup
   isOpenGuide: false,
   guideStep: 0,
   openGuide: () => set({ isOpenGuide: true, guideStep: 0 }),
@@ -189,5 +190,8 @@ export const useGameStore = create<GameState>((set) => ({
       ourEatenHistory: [],
       opnEatenHistory: [],
       moveHistory: [],
+      isCheck: false,
+      isGameOver: false,
+      winner: null,
     }),
 }));

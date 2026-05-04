@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useAuthStore } from "@/store/useAuthStore";
 import api from "@/lib/api";
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import { AxiosError } from "axios";
 
 const TIME_CONTROLS = [
   { label: "Bullet 1+0", value: "bullet", seconds: 60 },
@@ -37,8 +40,9 @@ export default function LobbyPage() {
         timeLimitSeconds: tc.seconds,
       });
       router.push(`/room/${res.data.code}`);
-    } catch {
-      setError("Tạo phòng thất bại");
+    } catch (err) {
+      const error = err as AxiosError<{ error?: string; message?: string }>;
+      setError(error.response?.data?.message || error.response?.data?.error || `Tạo phòng thất bại${error.response?.status ? ` (${error.response.status})` : ""}`);
     } finally {
       setLoading(false);
     }
@@ -51,8 +55,9 @@ export default function LobbyPage() {
     try {
       await api.post(`/api/rooms/${code.toUpperCase()}/join`);
       router.push(`/room/${code.toUpperCase()}`);
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Không tìm thấy phòng");
+    } catch (err) {
+      const error = err as AxiosError<{ error?: string; message?: string }>;
+      setError(error.response?.data?.message || error.response?.data?.error || "Không tìm thấy phòng");
     } finally {
       setLoading(false);
     }
@@ -68,7 +73,18 @@ export default function LobbyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#302E2B] bg-[url('/layouts/Cover-Dark.png')] flex flex-col">
+    <div className="relative min-h-screen bg-[#302E2B] bg-[url('/layouts/Cover-Dark.png')] flex flex-col">
+      <div className="absolute top-20 left-2 md:left-4">
+        <Link href="/">
+          <button
+            className="group flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-[#2A2D45]/90 backdrop-blur-sm text-[#4A4A4A] dark:text-white rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 cursor-pointer active:scale-95 transition-all"
+          >
+            <ChevronLeft size={18} />
+            <span className="font-bold text-sm">Quay lại</span>
+          </button>
+        </Link>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 bg-[#2A2D45]/80 backdrop-blur-sm border-b border-gray-700">
         <h1 className="text-2xl font-bold text-[#B1A7FC]">Majesty Gambit</h1>

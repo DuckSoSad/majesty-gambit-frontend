@@ -7,10 +7,13 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import api from "@/lib/api";
 import { RoomInfo, RoomMessage } from "@/types/chess";
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 
 export default function RoomPage() {
   const auth = useRequireAuth();
-  const { code } = useParams<{ code: string }>();
+  const params = useParams<{ code: string }>();
+  const code = params?.code;
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -23,6 +26,7 @@ export default function RoomPage() {
 
   // Load room info
   useEffect(() => {
+    if (!code) return;
     api.get(`/api/rooms/${code}`).then((res) => setRoom(res.data)).catch(() => {
       setError("Không tìm thấy phòng");
     });
@@ -30,7 +34,7 @@ export default function RoomPage() {
 
   // WS subscriptions
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || !code) return;
 
     // Notify others I joined
     send(`/app/room/${code}/join`, {});
@@ -51,22 +55,33 @@ export default function RoomPage() {
     });
 
     return () => sub?.unsubscribe();
-  }, [connected]);
+  }, [code, connected, router, send, subscribe]);
 
   const handleReady = useCallback(() => {
+    if (!code) return;
     if (iAmReady) return;
     send(`/app/room/${code}/ready`, {});
     setIAmReady(true);
   }, [iAmReady, code, send]);
 
-  if (!auth) return null;
+  if (!auth || !code) return null;
 
-  const myPlayer = room?.players.find((p) => p.username === user?.username);
   const opponent = room?.players.find((p) => p.username !== user?.username);
   const canReady = room?.players.length === 2 && !iAmReady;
 
   return (
-    <div className="min-h-screen bg-[#302E2B] bg-[url('/layouts/Cover-Dark.png')] flex items-center justify-center p-6">
+    <div className="relative min-h-screen bg-[#302E2B] bg-[url('/layouts/Cover-Dark.png')] flex items-center justify-center p-6">
+      <div className="absolute top-20 left-2 md:left-4">
+        <Link href="/">
+          <button
+            className="group flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-[#2A2D45]/90 backdrop-blur-sm text-[#4A4A4A] dark:text-white rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 cursor-pointer active:scale-95 transition-all"
+          >
+            <ChevronLeft size={18} />
+            <span className="font-bold text-sm">Quay lại</span>
+          </button>
+        </Link>
+      </div>
+
       <div className="w-full max-w-lg bg-[#2A2D45]/90 backdrop-blur-sm rounded-2xl p-8 shadow-2xl border border-gray-700">
         {/* Header */}
         <div className="text-center mb-8">

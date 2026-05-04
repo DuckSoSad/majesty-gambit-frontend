@@ -1,4 +1,11 @@
-import { getPieceImage, Piece, PieceRole, TeamType } from "@/Constants";
+import {
+  getPieceImage,
+  horizonAxis,
+  Piece,
+  PieceRole,
+  PIECE_ICONS,
+  TeamType,
+} from "@/Constants";
 
 const FEN_TO_ROLE: Record<string, PieceRole> = {
   P: PieceRole.Pawn,
@@ -64,6 +71,18 @@ export function fenToPieces(fen: string): Piece[] {
   });
 
   return pieces;
+}
+
+export function fenToMoveHistory(fen: string): string[] {
+  const [, , , enPassantTarget] = fen.split(" ");
+  if (!enPassantTarget || enPassantTarget === "-") return [];
+
+  const file = enPassantTarget[0];
+  const rank = Number(enPassantTarget[1]);
+  if (!horizonAxis.includes(file) || ![3, 6].includes(rank)) return [];
+
+  if (rank === 6) return [`${PIECE_ICONS["pawn-black"]}: ${file}7${file}5`];
+  return [`${PIECE_ICONS["pawn-white"]}: ${file}2${file}4`];
 }
 
 export function formatTime(ms: number): string {

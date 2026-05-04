@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -13,6 +15,7 @@ public class ChessGameState {
     private Long gameId;
     private String fen;
     private String lastMove;
+    private List<String> moveHistory;
     private String currentTurn;
     private boolean isCheck;
     private boolean isCheckmate;

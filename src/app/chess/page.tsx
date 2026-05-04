@@ -54,7 +54,7 @@ export default function Page() {
           </button>
         </div>
       </div>
-      <div className="w-[95vw] h-[95vw] md:w-150 md:h-200 text-center">
+      <div className="w-[95vw] h-[95vw] md:w-150 md:h-190 text-center">
         <MoveHistory />
       </div>
 

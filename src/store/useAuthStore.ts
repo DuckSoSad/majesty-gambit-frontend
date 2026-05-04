@@ -6,10 +6,12 @@ interface AuthState {
   user: UserInfo | null;
   accessToken: string | null;
   refreshToken: string | null;
+  hasHydrated: boolean;
   login: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
   setUser: (user: UserInfo) => void;
   setAccessToken: (token: string) => void;
+  setHasHydrated: (hasHydrated: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -18,6 +20,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       accessToken: null,
       refreshToken: null,
+      hasHydrated: false,
 
       login: (accessToken, refreshToken) =>
         set({ accessToken, refreshToken }),
@@ -28,7 +31,19 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
 
       setAccessToken: (token) => set({ accessToken: token }),
+
+      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
     }),
-    { name: "chess-auth" }
+    {
+      name: "chess-auth",
+      partialize: (state) => ({
+        user: state.user,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+    }
   )
 );

@@ -96,6 +96,7 @@ public class GameService {
             return ChessGameState.builder()
                     .gameId(gameId)
                     .fen(game.getCurrentFen())
+                    .moveHistory(getMoveHistory(game))
                     .result(gr.name())
                     .endReason("timeout")
                     .whiteTimeMs(game.getWhiteTimeMs())
@@ -117,6 +118,7 @@ public class GameService {
             throw new RuntimeException("Nước đi không hợp lệ");
 
         Piece movedPiece = board.getPiece(from);
+        Piece targetPiece = board.getPiece(to);
         board.doMove(chessMove);
 
         String newFen   = board.getFen();
@@ -135,6 +137,7 @@ public class GameService {
                 .toSquare(toSq.toLowerCase())
                 .piece(toPieceChar(movedPiece))
                 .promotion(promotion)
+                .san(formatMoveNote(movedPiece, fromSq, toSq, promotion, targetPiece != Piece.NONE, inCheck, isMate))
                 .fenAfter(newFen)
                 .timeSpentMs((int) elapsedMs)
                 .build();
@@ -164,6 +167,7 @@ public class GameService {
                 .gameId(gameId)
                 .fen(newFen)
                 .lastMove(fromSq.toLowerCase() + toSq.toLowerCase())
+                .moveHistory(getMoveHistory(game))
                 .currentTurn(isWhiteTurn ? "black" : "white")
                 .isCheck(inCheck)
                 .isCheckmate(isMate)
@@ -193,6 +197,7 @@ public class GameService {
         return ChessGameState.builder()
                 .gameId(gameId)
                 .fen(game.getCurrentFen())
+                .moveHistory(getMoveHistory(game))
                 .result(gr.name())
                 .endReason("resign")
                 .whiteTimeMs(game.getWhiteTimeMs())
@@ -210,9 +215,11 @@ public class GameService {
 
         boolean inCheck = board.isKingAttacked();
         boolean noMoves = board.legalMoves().isEmpty();
+        ClockSnapshot clock = getLiveClockSnapshot(game, board.getSideToMove());
         return ChessGameState.builder()
                 .gameId(gameId)
                 .fen(game.getCurrentFen())
+                .moveHistory(getMoveHistory(game))
                 .currentTurn(board.getSideToMove() == Side.WHITE ? "white" : "black")
                 .isCheck(inCheck)
                 .isCheckmate(inCheck  && noMoves)
@@ -221,8 +228,8 @@ public class GameService {
                 .endReason(game.getEndReason() != null ? game.getEndReason().name() : null)
                 .whiteUsername(game.getWhitePlayer().getUsername())
                 .blackUsername(game.getBlackPlayer().getUsername())
-                .whiteTimeMs(game.getWhiteTimeMs())
-                .blackTimeMs(game.getBlackTimeMs())
+                .whiteTimeMs(clock.whiteTimeMs())
+                .blackTimeMs(clock.blackTimeMs())
                 .build();
     }
 
@@ -248,4 +255,96 @@ public class GameService {
             default     -> "?";
         };
     }
+
+    private List<String> getMoveHistory(Game game) {
+        return moveRepository.findByGameOrderByMoveNumberAsc(game)
+                .stream()
+                .map(this::formatMoveRecord)
+                .toList();
+    }
+
+    private String formatMoveRecord(com.chess.entity.Move move) {
+        if (move.getSan() != null && !move.getSan().isBlank()) {
+            return move.getSan();
+        }
+
+        String promotion = move.getPromotion() != null && !move.getPromotion().isBlank()
+                ? "=" + move.getPromotion().toUpperCase()
+                : "";
+        return pieceIcon(move.getPiece(), move.getPlayerColor())
+                + ": "
+                + move.getFromSquare()
+                + move.getToSquare()
+                + promotion;
+    }
+
+    private String formatMoveNote(Piece piece, String fromSq, String toSq, String promotion,
+                                  boolean isCapture, boolean inCheck, boolean isMate) {
+        String from = fromSq.toLowerCase();
+        String to = toSq.toLowerCase();
+
+        if (piece.getPieceType() == com.github.bhlangonijr.chesslib.PieceType.KING) {
+            if (from.equals("e1") && to.equals("g1") || from.equals("e8") && to.equals("g8")) {
+                return pieceIcon(toPieceChar(piece), piece.getPieceSide()) + ": O-O";
+            }
+            if (from.equals("e1") && to.equals("c1") || from.equals("e8") && to.equals("c8")) {
+                return pieceIcon(toPieceChar(piece), piece.getPieceSide()) + ": O-O-O";
+            }
+        }
+
+        String promotionText = promotion != null && !promotion.isBlank()
+                ? "=" + promotion.toUpperCase()
+                : "";
+        String suffix = isMate ? "#" : inCheck ? "+" : "";
+
+        return pieceIcon(toPieceChar(piece), piece.getPieceSide())
+                + ": "
+                + from
+                + (isCapture ? "x" : "")
+                + to
+                + promotionText
+                + suffix;
+    }
+
+    private String pieceIcon(String piece, RoomPlayer.PieceColor color) {
+        return pieceIcon(piece, color == RoomPlayer.PieceColor.white ? Side.WHITE : Side.BLACK);
+    }
+
+    private String pieceIcon(String piece, Side side) {
+        boolean white = side == Side.WHITE;
+        return switch (piece) {
+            case "P" -> white ? "♙" : "♟";
+            case "N" -> white ? "♘" : "♞";
+            case "B" -> white ? "♗" : "♝";
+            case "R" -> white ? "♖" : "♜";
+            case "Q" -> white ? "♕" : "♛";
+            case "K" -> white ? "♔" : "♚";
+            default -> "";
+        };
+    }
+
+    private ClockSnapshot getLiveClockSnapshot(Game game, Side sideToMove) {
+        long whiteTimeMs = game.getWhiteTimeMs();
+        long blackTimeMs = game.getBlackTimeMs();
+
+        if (game.getResult() != null) {
+            return new ClockSnapshot(whiteTimeMs, blackTimeMs);
+        }
+
+        LocalDateTime reference = game.getLastMoveAt() != null ? game.getLastMoveAt() : game.getStartedAt();
+        if (reference == null) {
+            return new ClockSnapshot(whiteTimeMs, blackTimeMs);
+        }
+
+        long elapsedMs = Math.max(0L, Duration.between(reference, LocalDateTime.now()).toMillis());
+        if (sideToMove == Side.WHITE) {
+            whiteTimeMs = Math.max(0L, whiteTimeMs - elapsedMs);
+        } else {
+            blackTimeMs = Math.max(0L, blackTimeMs - elapsedMs);
+        }
+
+        return new ClockSnapshot(whiteTimeMs, blackTimeMs);
+    }
+
+    private record ClockSnapshot(long whiteTimeMs, long blackTimeMs) {}
 }
