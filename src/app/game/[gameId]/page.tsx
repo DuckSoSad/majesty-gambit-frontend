@@ -123,12 +123,12 @@ export default function GamePage() {
   const gameId = params?.gameId;
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const accessToken = useAuthStore((s) => s.accessToken);
 
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [fen, setFen] = useState("");
   const [currentTurn, setCurrentTurn] = useState<"white" | "black">("white");
-  const [myColor, setMyColor] = useState<"white" | "black">("white");
   const [whiteUsername, setWhiteUsername] = useState("");
   const [blackUsername, setBlackUsername] = useState("");
   const [whiteTimeMs, setWhiteTimeMs] = useState(() => getInitialClock(gameId ?? undefined).whiteTimeMs);
@@ -188,10 +188,13 @@ export default function GamePage() {
     if (!gameId) return;
     api.get<ChessGameState>(`/api/games/${gameId}`).then((res) => {
       applyState(res.data);
-      const myC = res.data.whiteUsername === user?.username ? "white" : "black";
-      setMyColor(myC);
     });
-  }, [applyState, gameId, user]);
+  }, [applyState, gameId]);
+
+  useEffect(() => {
+    if (!auth || !accessToken || user) return;
+    api.get("/api/users/me").then((res) => setUser(res.data));
+  }, [accessToken, auth, setUser, user]);
 
   // WS subscriptions
   useEffect(() => {
@@ -275,6 +278,20 @@ export default function GamePage() {
     };
   }, [pieces]);
 
+  const username = user?.username;
+  const myColor: "white" | "black" | null =
+    !username || !whiteUsername || !blackUsername
+      ? null
+      : username === whiteUsername
+        ? "white"
+        : username === blackUsername
+          ? "black"
+          : null;
+
+  const colorError = username && whiteUsername && blackUsername && !myColor
+    ? "Tài khoản hiện tại không thuộc trận đấu này"
+    : "";
+
   const handleResign = () => {
     if (!gameId) return;
     if (!confirm("Bạn có chắc muốn đầu hàng?")) return;
@@ -282,6 +299,16 @@ export default function GamePage() {
   };
 
   if (!auth || !gameId) return null;
+
+  if (!myColor) {
+    return (
+      <div className="min-h-screen bg-[#F4F7FA] dark:bg-[#34364C] flex items-center justify-center p-4">
+          <div className="rounded-xl bg-[#2A2D45] px-5 py-4 text-sm font-semibold text-white shadow-lg">
+          {colorError || error || "Đang tải trận đấu..."}
+        </div>
+      </div>
+    );
+  }
 
   const isMyTurn = currentTurn === myColor;
   const opponentName = myColor === "white" ? blackUsername : whiteUsername;
