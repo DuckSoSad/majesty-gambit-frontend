@@ -98,18 +98,27 @@ export default function Chessboard({
   const [pendingPromotion, setPendingPromotion] = useState<{
     id: string; x: number; y: number; fromAlg?: string; toAlg?: string;
   } | null>(null);
+  const lastPlayedMoveIndexRef = useRef<number>(-1);
   useEffect(() => {
     if (moveHistory.length !== 0) return;
     if (!onlineMode) playGameStart();
   }, [moveHistory.length, onlineMode, playGameStart]);
 
   useEffect(() => {
-    if (onlineMode || moveHistory.length === 0) return;
-    const last = moveHistory[moveHistory.length - 1];
+    if (moveHistory.length === 0 && ruleMoveHistory.length === 0) return;
+    const historyToUse = onlineMode ? ruleMoveHistory : moveHistory;
+    if (historyToUse.length === 0) return;
+    const currentMoveIndex = historyToUse.length - 1;
+    
+    // Only play sound if this is a new move (index increased)
+    if (currentMoveIndex <= lastPlayedMoveIndexRef.current) return;
+    lastPlayedMoveIndexRef.current = currentMoveIndex;
+    
+    const last = historyToUse[currentMoveIndex];
     if (isCheck) playMoveCheck();
     else if (last.includes("x")) playCapture();
     else playMove();
-  }, [moveHistory, isCheck, onlineMode, playCapture, playMove, playMoveCheck]);
+  }, [moveHistory, ruleMoveHistory, isCheck, onlineMode, playCapture, playMove, playMoveCheck]);
 
   const pieceMap = useMemo(() => {
     const m = new Map<string, Piece>();
@@ -175,7 +184,6 @@ export default function Chessboard({
     } else {
       promotePawn(pendingPromotion.id, role);
       makeMove(pendingPromotion.id, pendingPromotion.x, pendingPromotion.y);
-      playMove();
     }
     setPendingPromotion(null);
   };

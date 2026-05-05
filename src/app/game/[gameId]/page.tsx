@@ -236,7 +236,26 @@ export default function GamePage() {
   }, [blackTimeMs, currentTurn, gameId, gameResult, hasLoadedGameState, whiteTimeMs]);
 
   const handleMove = useCallback((from: string, to: string, promotion?: string) => {
-    if (!gameId) return;
+    if (!gameId || !pieces) return;
+    
+    // Optimistic update: update pieces immediately before server confirms
+    const fromCoord = squareToCoord(from);
+    const toCoord = squareToCoord(to);
+    const movedPiece = pieces.find(p => p.x === fromCoord.x && p.y === fromCoord.y);
+    
+    if (movedPiece) {
+      // Move piece and remove any captured piece at destination
+      const updatedPieces = pieces
+        .filter(p => !(p.x === toCoord.x && p.y === toCoord.y))
+        .map(p => 
+          p.id === movedPiece.id 
+            ? { ...p, x: toCoord.x, y: toCoord.y }
+            : p
+        );
+      
+      setPieces(updatedPieces);
+    }
+    
     send(`/app/game/${gameId}/move`, {
       gameId: Number(gameId),
       fromSquare: from,
@@ -244,7 +263,7 @@ export default function GamePage() {
       promotion: promotion ?? null,
       timeSpentMs: 0,
     });
-  }, [gameId, send]);
+  }, [gameId, send, pieces]);
 
   const onlineMoveHistory = useMemo(
     () => (fen ? fenToMoveHistory(fen) : []),
