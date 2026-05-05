@@ -56,6 +56,9 @@ public class Room {
     @Column(name = "ended_at")
     private LocalDateTime endedAt;
 
+    @Column(name = "host_color_preference", length = 10)
+    private String hostColorPreference; // "white", "black", null = random
+
     @PrePersist
     protected void onCreate() { createdAt = LocalDateTime.now(); }
 

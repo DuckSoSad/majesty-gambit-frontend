@@ -1,57 +1,60 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+
+const SOUND_FILES = {
+  gameStart: "/sounds/game-start.mp3",
+  move: "/sounds/move-self.mp3",
+  capture: "/sounds/capture.mp3",
+  moveCheck: "/sounds/move-check.mp3",
+} as const;
+
+type SoundKey = keyof typeof SOUND_FILES;
 
 export const useChessSounds = () => {
-  const gameStart = useRef<HTMLAudioElement | null>(null);
-  const moveSound = useRef<HTMLAudioElement | null>(null);
-  const captureSound = useRef<HTMLAudioElement | null>(null);
-  const moveCheck = useRef<HTMLAudioElement | null>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const buffersRef = useRef<Partial<Record<SoundKey, AudioBuffer>>>({});
 
   useEffect(() => {
-    gameStart.current = new Audio("/sounds/game-start.mp3");
-    moveSound.current = new Audio("/sounds/move-self.mp3");
-    captureSound.current = new Audio("/sounds/capture.mp3");
-    moveCheck.current = new Audio("/sounds/move-check.mp3");
+    const ctx = new AudioContext();
+    ctxRef.current = ctx;
+
+    (Object.entries(SOUND_FILES) as [SoundKey, string][]).forEach(([key, url]) => {
+      fetch(url)
+        .then((r) => r.arrayBuffer())
+        .then((ab) => ctx.decodeAudioData(ab))
+        .then((buf) => { buffersRef.current[key] = buf; })
+        .catch(() => {});
+    });
 
     return () => {
-      gameStart.current = null;
-      moveSound.current = null;
-      captureSound.current = null;
-      moveCheck.current = null;
+      ctx.close();
+      ctxRef.current = null;
+      buffersRef.current = {};
     };
   }, []);
 
-  const playGameStart = () => {
-    if (gameStart.current) {
-      gameStart.current.currentTime = 0;
-      gameStart.current.play().catch(() => {});
-    }
-  };
+  const play = useCallback((key: SoundKey) => {
+    const ctx = ctxRef.current;
+    const buf = buffersRef.current[key];
+    if (!ctx || !buf) return;
 
-  const playMove = () => {
-    if (moveSound.current) {
-      moveSound.current.currentTime = 0;
-      moveSound.current.play().catch(() => {});
-    }
-  };
+    const startPlayback = () => {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+    };
 
-  const playCapture = () => {
-    if (captureSound.current) {
-      captureSound.current.currentTime = 0;
-      captureSound.current.play().catch(() => {});
+    if (ctx.state === "suspended") {
+      ctx.resume().then(startPlayback).catch(() => {});
+    } else {
+      startPlayback();
     }
-  };
+  }, []);
 
-  const playMoveCheck = () => {
-    if (moveCheck.current) {
-      moveCheck.current.currentTime = 0;
-      moveCheck.current.play().catch(() => {});
-    }
-  };
+  const playGameStart = useCallback(() => play("gameStart"), [play]);
+  const playMove = useCallback(() => play("move"), [play]);
+  const playCapture = useCallback(() => play("capture"), [play]);
+  const playMoveCheck = useCallback(() => play("moveCheck"), [play]);
 
-  return {
-    playGameStart,
-    playMove,
-    playMoveCheck,
-    playCapture,
-  };
+  return { playGameStart, playMove, playMoveCheck, playCapture };
 };

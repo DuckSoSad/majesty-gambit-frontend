@@ -22,12 +22,15 @@ public class RoomService {
     private final RoomRepository roomRepository;
     private final RoomPlayerRepository roomPlayerRepository;
 
-    public Room createRoom(User host, Room.TimeControl timeControl, int timeLimitSeconds) {
+    public Room createRoom(User host, Room.TimeControl timeControl, int timeLimitSeconds, String colorPreference) {
+        String pref = "white".equalsIgnoreCase(colorPreference) || "black".equalsIgnoreCase(colorPreference)
+                ? colorPreference.toLowerCase() : null;
         Room room = Room.builder()
                 .code(generateUniqueCode())
                 .host(host)
                 .timeControl(timeControl)
                 .timeLimitSeconds(timeLimitSeconds)
+                .hostColorPreference(pref)
                 .build();
         room = roomRepository.save(room);
 
@@ -36,6 +39,22 @@ public class RoomService {
                 .user(host)
                 .build();
         roomPlayerRepository.save(hostPlayer);
+        return room;
+    }
+
+    public Room createMatchmakingRoom(User player1, User player2, Room.TimeControl timeControl, int timeLimitSeconds) {
+        Room room = Room.builder()
+                .code(generateUniqueCode())
+                .host(player1)
+                .timeControl(timeControl)
+                .timeLimitSeconds(timeLimitSeconds)
+                .build();
+        room = roomRepository.save(room);
+
+        roomPlayerRepository.saveAll(List.of(
+                RoomPlayer.builder().room(room).user(player1).isReady(true).build(),
+                RoomPlayer.builder().room(room).user(player2).isReady(true).build()
+        ));
         return room;
     }
 

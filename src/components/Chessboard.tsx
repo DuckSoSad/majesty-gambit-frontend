@@ -35,6 +35,7 @@ interface ChessboardProps {
   myColor?: "white" | "black";
   externalPieces?: Piece[];
   externalMoveHistory?: string[];
+  onlineSoundHistory?: string[];
   onlineTurn?: "white" | "black";
   onMove?: (from: string, to: string, promotion?: string) => void;
   gameOver?: boolean;
@@ -45,6 +46,7 @@ export default function Chessboard({
   myColor = "white",
   externalPieces,
   externalMoveHistory,
+  onlineSoundHistory,
   onlineTurn,
   onMove,
   gameOver = false,
@@ -98,6 +100,12 @@ export default function Chessboard({
   const [pendingPromotion, setPendingPromotion] = useState<{
     id: string; x: number; y: number; fromAlg?: string; toAlg?: string;
   } | null>(null);
+  const effectiveIsCheck = useMemo(() => {
+    if (!onlineMode) return isCheck;
+    const team = onlineTurn === "white" ? TeamType.OUR : TeamType.OPPONENT;
+    return referee.isKingInCheck(team, pieces, ruleMoveHistory);
+  }, [onlineMode, isCheck, onlineTurn, pieces, ruleMoveHistory, referee]);
+
   const lastPlayedMoveIndexRef = useRef<number>(-1);
   useEffect(() => {
     if (moveHistory.length !== 0) return;
@@ -105,20 +113,18 @@ export default function Chessboard({
   }, [moveHistory.length, onlineMode, playGameStart]);
 
   useEffect(() => {
-    if (moveHistory.length === 0 && ruleMoveHistory.length === 0) return;
-    const historyToUse = onlineMode ? ruleMoveHistory : moveHistory;
-    if (historyToUse.length === 0) return;
-    const currentMoveIndex = historyToUse.length - 1;
-    
-    // Only play sound if this is a new move (index increased)
+    const soundHistory = onlineMode ? (onlineSoundHistory ?? EMPTY_MOVE_HISTORY) : moveHistory;
+    if (soundHistory.length === 0) return;
+    const currentMoveIndex = soundHistory.length - 1;
+
     if (currentMoveIndex <= lastPlayedMoveIndexRef.current) return;
     lastPlayedMoveIndexRef.current = currentMoveIndex;
-    
-    const last = historyToUse[currentMoveIndex];
-    if (isCheck) playMoveCheck();
+
+    const last = soundHistory[currentMoveIndex];
+    if (effectiveIsCheck) playMoveCheck();
     else if (last.includes("x")) playCapture();
     else playMove();
-  }, [moveHistory, ruleMoveHistory, isCheck, onlineMode, playCapture, playMove, playMoveCheck]);
+  }, [onlineSoundHistory, moveHistory, effectiveIsCheck, onlineMode, playCapture, playMove, playMoveCheck]);
 
   const pieceMap = useMemo(() => {
     const m = new Map<string, Piece>();

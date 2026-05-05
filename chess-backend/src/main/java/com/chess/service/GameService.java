@@ -35,9 +35,32 @@ public class GameService {
         List<RoomPlayer> players = new ArrayList<>(roomPlayerRepository.findByRoomCode(room.getCode()));
         if (players.size() < 2) throw new RuntimeException("Cần đủ 2 người chơi");
 
-        Collections.shuffle(players);
-        players.get(0).setColor(RoomPlayer.PieceColor.white);
-        players.get(1).setColor(RoomPlayer.PieceColor.black);
+        String hostPref = room.getHostColorPreference();
+        RoomPlayer whiteRp, blackRp;
+
+        if ("white".equalsIgnoreCase(hostPref) || "black".equalsIgnoreCase(hostPref)) {
+            RoomPlayer hostRp = players.stream()
+                    .filter(p -> p.getUser().getId().equals(room.getHost().getId()))
+                    .findFirst().orElse(players.get(0));
+            RoomPlayer guestRp = players.stream()
+                    .filter(p -> !p.getUser().getId().equals(room.getHost().getId()))
+                    .findFirst().orElse(players.get(1));
+            if ("white".equalsIgnoreCase(hostPref)) {
+                hostRp.setColor(RoomPlayer.PieceColor.white);
+                guestRp.setColor(RoomPlayer.PieceColor.black);
+                whiteRp = hostRp; blackRp = guestRp;
+            } else {
+                hostRp.setColor(RoomPlayer.PieceColor.black);
+                guestRp.setColor(RoomPlayer.PieceColor.white);
+                whiteRp = guestRp; blackRp = hostRp;
+            }
+        } else {
+            Collections.shuffle(players);
+            players.get(0).setColor(RoomPlayer.PieceColor.white);
+            players.get(1).setColor(RoomPlayer.PieceColor.black);
+            whiteRp = players.get(0);
+            blackRp = players.get(1);
+        }
         roomPlayerRepository.saveAll(players);
 
         room.setStatus(Room.RoomStatus.in_progress);
@@ -47,8 +70,8 @@ public class GameService {
         long timeMs = (long) room.getTimeLimitSeconds() * 1000L;
         Game game = Game.builder()
                 .room(room)
-                .whitePlayer(players.get(0).getUser())
-                .blackPlayer(players.get(1).getUser())
+                .whitePlayer(whiteRp.getUser())
+                .blackPlayer(blackRp.getUser())
                 .whiteTimeMs(timeMs)
                 .blackTimeMs(timeMs)
                 .build();

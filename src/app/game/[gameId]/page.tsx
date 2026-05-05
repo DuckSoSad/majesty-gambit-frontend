@@ -381,6 +381,7 @@ export default function GamePage() {
               myColor={myColor}
               externalPieces={pieces}
               externalMoveHistory={onlineMoveHistory}
+              onlineSoundHistory={moveHistory}
               onlineTurn={currentTurn}
               onMove={handleMove}
               gameOver={!!gameResult}

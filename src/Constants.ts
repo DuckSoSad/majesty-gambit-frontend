@@ -41,7 +41,7 @@ export type Piece = {
 };
 
 export function getPieceImage(name: string, type: string) {
-  return `/pieces/Light/${name}, ${type}.png`;
+  return `/pieces/Light/${name}_${type}.png`;
 }
 
 export default function createInitialPieces(): Piece[] {

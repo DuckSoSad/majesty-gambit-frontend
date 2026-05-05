@@ -27,7 +27,7 @@ public class RoomController {
     public ResponseEntity<RoomResponse> createRoom(@AuthenticationPrincipal User user,
                                                     @Valid @RequestBody CreateRoomRequest req) {
         Room.TimeControl tc = Room.TimeControl.valueOf(req.getTimeControl().toLowerCase());
-        Room room = roomService.createRoom(user, tc, req.getTimeLimitSeconds());
+        Room room = roomService.createRoom(user, tc, req.getTimeLimitSeconds(), req.getColorPreference());
         return ResponseEntity.ok(RoomResponse.from(room, List.of()));
     }
 
@@ -55,6 +55,7 @@ public class RoomController {
         @NotBlank
         private String timeControl;        // "blitz", "rapid", "bullet", "classical"
         private int timeLimitSeconds = 300;
+        private String colorPreference = "random"; // "white", "black", "random"
     }
 
     record PlayerInfo(String username, String color, Boolean isReady) {
