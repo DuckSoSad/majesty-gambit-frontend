@@ -132,7 +132,7 @@ export default function LobbyPage() {
 
   return (
     <div className="relative min-h-screen bg-[#302E2B] bg-[url('/layouts/Cover-Dark.png')] flex flex-col">
-      <div className="absolute top-20 left-2 md:left-4">
+      <div className="absolute top-26 md:top-20 left-2 md:left-4">
         <Link href="/">
           <button className="group flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-[#2A2D45]/90 backdrop-blur-sm text-[#4A4A4A] dark:text-white rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 cursor-pointer active:scale-95 transition-all">
             <ChevronLeft size={18} />

@@ -6,13 +6,15 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import Chessboard from "@/components/Chessboard";
+import ConfirmPopup from "@/components/ConfirmPopup";
 import MoveHistory from "@/components/MoveHistory";
 import { fenToMoveHistory, fenToPieces, formatTime } from "@/utils/fenToPieces";
 import api from "@/lib/api";
 import { ChessGameState } from "@/types/chess";
 import { Piece, PieceRole, PIECE_ICONS, TeamType } from "@/Constants";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+import { ChevronLeft, HelpCircle } from "lucide-react";
+import { useGuide } from "@/hooks/useGuide";
+import GuidePopup from "@/components/GuidePopup";
 
 const STARTING_ROLE_COUNTS: Record<PieceRole, number> = {
   [PieceRole.Bishop]: 2,
@@ -126,6 +128,8 @@ export default function GamePage() {
   const setUser = useAuthStore((s) => s.setUser);
   const accessToken = useAuthStore((s) => s.accessToken);
 
+  const { open } = useGuide();
+
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [fen, setFen] = useState("");
   const [currentTurn, setCurrentTurn] = useState<"white" | "black">("white");
@@ -138,6 +142,8 @@ export default function GamePage() {
   const [gameResult, setGameResult] = useState<string | null>(null);
   const [endReason, setEndReason] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [showResignConfirm, setShowResignConfirm] = useState(false);
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
   const piecesRef = useRef<Piece[]>([]);
   const currentTurnRef = useRef<"white" | "black">("white");
 
@@ -212,7 +218,6 @@ export default function GamePage() {
     };
   }, [applyState, connected, gameId, subscribe]);
 
-  // Local clock countdown
   useEffect(() => {
     if (gameResult) return;
     const id = setInterval(() => {
@@ -234,6 +239,26 @@ export default function GamePage() {
     };
     localStorage.setItem(getClockStorageKey(gameId), JSON.stringify(snapshot));
   }, [blackTimeMs, currentTurn, gameId, gameResult, hasLoadedGameState, whiteTimeMs]);
+
+  // Auto-redirect to lobby 5s after game ends
+  useEffect(() => {
+    if (!gameResult) return;
+    
+    setRedirectCountdown(5);
+    
+    const interval = setInterval(() => {
+      setRedirectCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          router.push("/lobby");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [gameResult, router]);
 
   const handleMove = useCallback((from: string, to: string, promotion?: string) => {
     if (!gameId || !pieces) return;
@@ -311,9 +336,17 @@ export default function GamePage() {
     ? "Tài khoản hiện tại không thuộc trận đấu này"
     : "";
 
-  const handleResign = () => {
+  const handleBack = () => {
+    if (gameResult) {
+      router.push("/lobby");
+      return;
+    }
+    setShowResignConfirm(true);
+  };
+
+  const confirmResign = () => {
     if (!gameId) return;
-    if (!confirm("Bạn có chắc muốn đầu hàng?")) return;
+    setShowResignConfirm(false);
     send(`/app/game/${gameId}/resign`, {});
   };
 
@@ -347,18 +380,25 @@ export default function GamePage() {
   return (
     <div className="relative min-h-screen bg-[#F4F7FA] dark:bg-[#34364C] flex flex-col xl:flex-row items-center justify-center gap-5 p-4">
       <div className="absolute top-4 left-2 md:left-4">
-        <Link href="/">
-          <button
-            onClick={handleResign}
-            className="group flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-[#2A2D45]/90 backdrop-blur-sm text-[#4A4A4A] dark:text-white rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 cursor-pointer active:scale-95 transition-all"
-          >
-            <ChevronLeft size={18} />
-            <span className="font-bold text-sm">Quay lại</span>
-          </button>
-        </Link>
+        <button
+          onClick={handleBack}
+          className="group flex items-center gap-1.5 px-3 py-2 bg-white/90 dark:bg-[#2A2D45]/90 backdrop-blur-sm text-[#4A4A4A] dark:text-white rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 cursor-pointer active:scale-95 transition-all"
+        >
+          <ChevronLeft size={18} />
+          <span className="font-bold text-sm">Quay lại</span>
+        </button>
       </div>
 
-      <div className="flex w-full max-w-fit flex-col gap-3">
+      <div className="absolute top-4 right-2 md:right-4">
+        <button
+          onClick={() => open(true)}
+          className="p-2.5 bg-[#B1A7FC] text-white rounded-full shadow-lg shadow-[#B1A7FC]/30 active:scale-90 transition-all cursor-pointer"
+        >
+          <HelpCircle size={24} />
+        </button>
+      </div>
+
+      <div className="mt-14 md:mt-4 flex w-full max-w-fit flex-col gap-3">
         <div className={`flex items-center justify-between rounded-xl px-4 py-3 shadow-lg ${!isMyTurn && !gameResult ? "bg-[#2A2D45] ring-2 ring-[#B1A7FC]" : "bg-[#2A2D45]"}`}>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-gray-600 flex items-center justify-center text-white font-bold">
@@ -420,11 +460,24 @@ export default function GamePage() {
           rightLabel={blackUsername || "Đen"}
         />
         {!gameResult && (
-          <button onClick={handleResign} className="rounded-xl border border-red-300/50 bg-white/80 py-3 text-center text-sm font-bold text-red-500 shadow-sm transition-colors hover:bg-red-50 dark:border-red-400/30 dark:bg-[#2A2D45] dark:hover:bg-[#3A2D45]">
+          <button onClick={handleBack} className="rounded-xl border border-red-300/50 bg-white/80 py-3 text-center text-sm font-bold text-red-500 shadow-sm transition-colors hover:bg-red-50 dark:border-red-400/30 dark:bg-[#2A2D45] dark:hover:bg-[#3A2D45]">
             Đầu hàng
           </button>
         )}
       </aside>
+
+      {/* Resign confirm popup */}
+      <ConfirmPopup
+        open={showResignConfirm}
+        icon="🏳️"
+        title="Đầu hàng"
+        message="Bạn có chắc muốn đầu hàng trận này không?"
+        confirmLabel="Đầu hàng"
+        cancelLabel="Tiếp tục chơi"
+        variant="danger"
+        onConfirm={confirmResign}
+        onCancel={() => setShowResignConfirm(false)}
+      />
 
       {/* Game result overlay */}
       {gameResult && (
@@ -439,7 +492,7 @@ export default function GamePage() {
             )}
             <div className="flex gap-3">
               <button onClick={() => router.push("/lobby")} className="flex-1 bg-white/20 hover:bg-white/30 text-white font-bold py-3 rounded-xl transition-all cursor-pointer">
-                Về lobby
+                Về lobby {redirectCountdown !== null ? `(${redirectCountdown}s)` : ""}
               </button>
               <button onClick={() => router.push("/lobby")} className="flex-1 bg-white text-[#B1A7FC] font-bold py-3 rounded-xl transition-all cursor-pointer">
                 Chơi lại
@@ -448,6 +501,8 @@ export default function GamePage() {
           </div>
         </div>
       )}
+
+      <GuidePopup />
     </div>
   );
 }
