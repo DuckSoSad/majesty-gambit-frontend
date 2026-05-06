@@ -6,7 +6,10 @@ import SockJS from "sockjs-client";
 
 export function useWebSocket(token: string | null) {
   const clientRef = useRef<Client | null>(null);
+  const tokenRef = useRef<string | null>(token);
   const [connected, setConnected] = useState(false);
+
+  useEffect(() => { tokenRef.current = token; }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -42,6 +45,7 @@ export function useWebSocket(token: string | null) {
     clientRef.current?.publish({
       destination: dest,
       body: JSON.stringify(body),
+      headers: tokenRef.current ? { Authorization: `Bearer ${tokenRef.current}` } : {},
     });
   }, []);
 

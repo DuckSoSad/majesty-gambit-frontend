@@ -41,7 +41,7 @@ public class User implements UserDetails {
 
     @Column(name = "elo_rating")
     @Builder.Default
-    private Integer eloRating = 1200;
+    private Integer eloRating = 100;
 
     @Column(length = 20)
     @Enumerated(EnumType.STRING)

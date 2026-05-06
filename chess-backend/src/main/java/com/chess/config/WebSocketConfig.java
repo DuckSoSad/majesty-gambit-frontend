@@ -50,25 +50,29 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        // Xác thực JWT khi WebSocket connect
         registration.interceptors(new ChannelInterceptor() {
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
                 StompHeaderAccessor accessor =
                         MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+                if (accessor == null) return message;
 
-                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
+                if (accessor.getUser() == null) {
                     String token = accessor.getFirstNativeHeader("Authorization");
                     if (StringUtils.hasText(token) && token.startsWith("Bearer ")) {
                         token = token.substring(7);
-                        if (jwtTokenProvider.validateToken(token)) {
-                            String username = jwtTokenProvider.getUsernameFromToken(token);
-                            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-                            UsernamePasswordAuthenticationToken auth =
-                                    new UsernamePasswordAuthenticationToken(
-                                            userDetails, null, userDetails.getAuthorities());
-                            accessor.setUser(auth);
-                            log.debug("WebSocket authenticated: {}", username);
+                        try {
+                            if (jwtTokenProvider.validateToken(token)) {
+                                String username = jwtTokenProvider.getUsernameFromToken(token);
+                                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                                UsernamePasswordAuthenticationToken auth =
+                                        new UsernamePasswordAuthenticationToken(
+                                                userDetails, null, userDetails.getAuthorities());
+                                accessor.setUser(auth);
+                                log.debug("WebSocket authenticated: {} ({})", username, accessor.getCommand());
+                            }
+                        } catch (Exception e) {
+                            log.warn("WebSocket auth failed: {}", e.getMessage());
                         }
                     }
                 }

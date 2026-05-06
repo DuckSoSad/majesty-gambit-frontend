@@ -51,6 +51,12 @@ public class Game {
     @Column(name = "black_time_ms")
     private Long blackTimeMs;
 
+    @Column(name = "white_rating_delta")
+    private Integer whiteRatingDelta;
+
+    @Column(name = "black_rating_delta")
+    private Integer blackRatingDelta;
+
     @Column(name = "last_move_at")
     private LocalDateTime lastMoveAt;
 

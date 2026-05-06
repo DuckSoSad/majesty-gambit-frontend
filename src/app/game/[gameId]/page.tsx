@@ -7,6 +7,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import Chessboard from "@/components/Chessboard";
 import ConfirmPopup from "@/components/ConfirmPopup";
+import GameChat, { ChatMessage } from "@/components/GameChat";
 import MoveHistory from "@/components/MoveHistory";
 import { fenToMoveHistory, fenToPieces, formatTime } from "@/utils/fenToPieces";
 import api from "@/lib/api";
@@ -141,6 +142,8 @@ export default function GamePage() {
   const [hasLoadedGameState, setHasLoadedGameState] = useState(false);
   const [gameResult, setGameResult] = useState<string | null>(null);
   const [endReason, setEndReason] = useState<string | null>(null);
+  const [ratingDeltas, setRatingDeltas] = useState<{ white: number; black: number } | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState("");
   const [showResignConfirm, setShowResignConfirm] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
@@ -179,6 +182,11 @@ export default function GamePage() {
     if (state.result) {
       setGameResult(state.result);
       setEndReason(state.endReason ?? null);
+      if (state.whiteRatingDelta != null && state.blackRatingDelta != null) {
+        setRatingDeltas({ white: state.whiteRatingDelta, black: state.blackRatingDelta });
+      }
+      // Refresh user profile to get updated eloRating
+      api.get("/api/users/me").then((res) => setUser(res.data)).catch(() => {});
     }
 
     if (nextPieces) piecesRef.current = nextPieces;
@@ -207,6 +215,9 @@ export default function GamePage() {
     if (!connected || !gameId) return;
 
     const gameSub = subscribe(`/topic/game/${gameId}`, applyState);
+    const chatSub = subscribe(`/topic/chat/${gameId}`, (msg: ChatMessage) => {
+      setChatMessages((prev) => [...prev, msg]);
+    });
     const errSub = subscribe("/user/queue/errors", (body: { error: string }) => {
       setError(body.error);
       setTimeout(() => setError(""), 3000);
@@ -214,6 +225,7 @@ export default function GamePage() {
 
     return () => {
       gameSub?.unsubscribe();
+      chatSub?.unsubscribe();
       errSub?.unsubscribe();
     };
   }, [applyState, connected, gameId, subscribe]);
@@ -347,6 +359,11 @@ export default function GamePage() {
   const confirmResign = () => {
     if (!gameId) return;
     setShowResignConfirm(false);
+    if (moveHistory.length < 10) {
+      setError(`Chỉ có thể đầu hàng sau 5 bước đi của mỗi bên`);
+      setTimeout(() => setError(""), 3000);
+      return;
+    }
     send(`/app/game/${gameId}/resign`, {});
   };
 
@@ -398,7 +415,7 @@ export default function GamePage() {
         </button>
       </div>
 
-      <div className="mt-14 md:mt-4 flex w-full max-w-fit flex-col gap-3">
+      <div className="mt-14 md:mt-1 flex w-full max-w-fit flex-col gap-3">
         <div className={`flex items-center justify-between rounded-xl px-4 py-3 shadow-lg ${!isMyTurn && !gameResult ? "bg-[#2A2D45] ring-2 ring-[#B1A7FC]" : "bg-[#2A2D45]"}`}>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-gray-600 flex items-center justify-center text-white font-bold">
@@ -451,19 +468,39 @@ export default function GamePage() {
       </div>
 
       <aside className="flex h-[95vw] w-[95vw] flex-col gap-3 md:h-190 md:w-150">
-        <MoveHistory
-          title="Online Match"
-          moveHistory={moveHistory}
-          ourEatenHistory={capturedByWhite}
-          opnEatenHistory={capturedByBlack}
-          leftLabel={whiteUsername || "Trắng"}
-          rightLabel={blackUsername || "Đen"}
+        <div className="flex-1 min-h-0">
+          <MoveHistory
+            title="Online Match"
+            moveHistory={moveHistory}
+            ourEatenHistory={capturedByWhite}
+            opnEatenHistory={capturedByBlack}
+            leftLabel={whiteUsername || "Trắng"}
+            rightLabel={blackUsername || "Đen"}
+          />
+        </div>
+        <GameChat
+          messages={chatMessages}
+          myUsername={user?.username ?? ""}
+          onSend={(msg) => send(`/app/game/${gameId}/chat`, { message: msg })}
+          canSend={!!myColor && !gameResult}
         />
-        {!gameResult && (
-          <button onClick={handleBack} className="rounded-xl border border-red-300/50 bg-white/80 py-3 text-center text-sm font-bold text-red-500 shadow-sm transition-colors hover:bg-red-50 dark:border-red-400/30 dark:bg-[#2A2D45] dark:hover:bg-[#3A2D45]">
-            Đầu hàng
-          </button>
-        )}
+        {!gameResult && (() => {
+          const movesLeft = Math.max(0, 10 - moveHistory.length);
+          const canResign = movesLeft === 0;
+          return (
+            <button
+              onClick={handleBack}
+              disabled={!canResign}
+              className={`rounded-xl border py-3 text-center text-sm font-bold shadow-sm transition-colors ${
+                canResign
+                  ? "border-red-300/50 bg-white/80 text-red-500 hover:bg-red-50 cursor-pointer dark:border-red-400/30 dark:bg-[#2A2D45] dark:hover:bg-[#3A2D45]"
+                  : "border-gray-500/30 bg-white/40 text-gray-400 cursor-not-allowed dark:bg-[#2A2D45]/60"
+              }`}
+            >
+              {canResign ? "Đầu hàng" : `Đầu hàng (còn ${movesLeft} bước)`}
+            </button>
+          );
+        })()}
       </aside>
 
       {/* Resign confirm popup */}
@@ -486,10 +523,21 @@ export default function GamePage() {
             <p className="text-[#4A447D] text-sm font-bold uppercase tracking-widest mb-2">Trận đấu kết thúc</p>
             <p className="text-4xl font-bold text-white mb-2">{resultText()}</p>
             {endReason && (
-              <p className="text-[#D0CAFF] text-sm mb-6 capitalize">
+              <p className="text-[#D0CAFF] text-sm capitalize">
                 {{ checkmate: "Chiếu hết", resign: "Đầu hàng", timeout: "Hết giờ", stalemate: "Hòa - Pat", agreement: "Hòa thỏa thuận" }[endReason] ?? endReason}
               </p>
             )}
+            {ratingDeltas && myColor && (
+              <p className={`text-lg font-bold mt-2 mb-4 ${
+                (myColor === "white" ? ratingDeltas.white : ratingDeltas.black) >= 0
+                  ? "text-green-300"
+                  : "text-red-300"
+              }`}>
+                {(myColor === "white" ? ratingDeltas.white : ratingDeltas.black) >= 0 ? "+" : ""}
+                {myColor === "white" ? ratingDeltas.white : ratingDeltas.black} điểm
+              </p>
+            )}
+            {!ratingDeltas && endReason && <div className="mb-4" />}
             <div className="flex gap-3">
               <button onClick={() => router.push("/lobby")} className="flex-1 bg-white/20 hover:bg-white/30 text-white font-bold py-3 rounded-xl transition-all cursor-pointer">
                 Về lobby {redirectCountdown !== null ? `(${redirectCountdown}s)` : ""}

@@ -48,6 +48,7 @@ public class RoomService {
                 .host(player1)
                 .timeControl(timeControl)
                 .timeLimitSeconds(timeLimitSeconds)
+                .isMatchmaking(true)
                 .build();
         room = roomRepository.save(room);
 

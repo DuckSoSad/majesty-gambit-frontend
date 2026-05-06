@@ -14,6 +14,9 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
 
 @Slf4j
 @Controller
@@ -62,6 +65,10 @@ public class ChessWebSocketController {
             messagingTemplate.convertAndSend("/topic/game/" + gameId, state);
         } catch (Exception e) {
             log.warn("Resign failed for game {}: {}", gameId, e.getMessage());
+            messagingTemplate.convertAndSendToUser(
+                    principal.getName(), "/queue/errors",
+                    ErrorMessage.of(e.getMessage())
+            );
         }
     }
 
@@ -115,6 +122,32 @@ public class ChessWebSocketController {
                     principal.getName(), "/queue/errors",
                     ErrorMessage.of(e.getMessage())
             );
+        }
+    }
+
+    /**
+     * Client gửi chat: SEND /app/game/{gameId}/chat
+     * Broadcast: /topic/chat/{gameId}
+     */
+    @MessageMapping("/game/{gameId}/chat")
+    public void handleChat(@DestinationVariable Long gameId,
+                           @Payload Map<String, String> payload,
+                           Principal principal) {
+        try {
+            String msg = payload.get("message");
+            if (msg == null || msg.isBlank()) return;
+            msg = msg.trim();
+            if (msg.length() > 200) msg = msg.substring(0, 200);
+
+            ChatMessageDto chat = ChatMessageDto.builder()
+                    .type("chat")
+                    .username(principal.getName())
+                    .message(msg)
+                    .timestamp(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm")))
+                    .build();
+            messagingTemplate.convertAndSend("/topic/chat/" + gameId, chat);
+        } catch (Exception e) {
+            log.warn("Chat failed for game {}: {}", gameId, e.getMessage());
         }
     }
 

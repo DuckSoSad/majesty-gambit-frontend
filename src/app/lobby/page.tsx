@@ -147,8 +147,11 @@ export default function LobbyPage() {
         <div className="flex items-center gap-4">
           <span className="text-gray-300 text-sm">
             ♟ <span className="text-white font-semibold">{user?.username}</span>
-            <span className="text-[#B1A7FC] ml-2">{user?.eloRating}</span>
+            <span className="text-[#B1A7FC] ml-2 font-bold">{user?.eloRating}</span>
           </span>
+          <Link href="/history" className="text-gray-400 hover:text-[#B1A7FC] text-sm transition-colors">
+            Lịch sử
+          </Link>
           <button onClick={handleLogout} className="text-gray-400 hover:text-white text-sm transition-colors cursor-pointer">
             Đăng xuất
           </button>

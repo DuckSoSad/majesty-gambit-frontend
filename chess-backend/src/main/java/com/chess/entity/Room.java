@@ -57,7 +57,11 @@ public class Room {
     private LocalDateTime endedAt;
 
     @Column(name = "host_color_preference", length = 10)
-    private String hostColorPreference; // "white", "black", null = random
+    private String hostColorPreference;
+
+    @Column(name = "is_matchmaking")
+    @Builder.Default
+    private Boolean isMatchmaking = false;
 
     @PrePersist
     protected void onCreate() { createdAt = LocalDateTime.now(); }

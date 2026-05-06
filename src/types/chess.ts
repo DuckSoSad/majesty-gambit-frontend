@@ -13,6 +13,8 @@ export interface ChessGameState {
   blackUsername?: string;
   whiteTimeMs?: number;
   blackTimeMs?: number;
+  whiteRatingDelta?: number;
+  blackRatingDelta?: number;
 }
 
 export interface RoomMessage {
