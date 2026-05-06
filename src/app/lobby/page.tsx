@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -46,6 +46,14 @@ export default function LobbyPage() {
   const matchSubRef = useRef<StompSubscription | undefined>(undefined);
   const { connected, subscribe } = useWebSocket(accessToken);
 
+  // Redirect back to ongoing game if one exists
+  useEffect(() => {
+    if (!auth) return;
+    api.get<{ roomCode?: string }>("/api/games/active").then((res) => {
+      if (res.data.roomCode) router.replace(`/game/${res.data.roomCode}`);
+    }).catch(() => {});
+  }, [auth, router]);
+
   if (!auth) return null;
 
   function switchTab(next: "find" | "private") {
@@ -59,9 +67,9 @@ export default function LobbyPage() {
     try {
       const tc = TIME_CONTROLS[selected];
       // Subscribe before POST to avoid missing the match_found message
-      matchSubRef.current = subscribe("/user/queue/matchmaking", (msg: { type: string; gameId?: number }) => {
-        if (msg.type === "match_found" && msg.gameId) {
-          router.push(`/game/${msg.gameId}`);
+      matchSubRef.current = subscribe("/user/queue/matchmaking", (msg: { type: string; gameId?: number; roomCode?: string }) => {
+        if (msg.type === "match_found" && msg.roomCode) {
+          router.push(`/game/${msg.roomCode}`);
         }
       });
       await api.post("/api/matchmaking/queue", {
@@ -80,15 +88,32 @@ export default function LobbyPage() {
     }
   }
 
-  async function handleCancelSearch() {
-    matchSubRef.current?.unsubscribe();
+  // Cancel matchmaking on unmount (e.g. navigate away while searching)
+  useEffect(() => {
+    return () => {
+      if (matchSubRef.current) {
+        matchSubRef.current.unsubscribe();
+        matchSubRef.current = undefined;
+        api.delete("/api/matchmaking/queue").catch(() => {});
+      }
+    };
+  }, []);
+
+  async function cancelMatchmakingIfActive() {
+    if (!matchSubRef.current) return;
+    matchSubRef.current.unsubscribe();
     matchSubRef.current = undefined;
-    try { await api.delete("/api/matchmaking/queue"); } catch {}
     setIsSearching(false);
+    try { await api.delete("/api/matchmaking/queue"); } catch {}
+  }
+
+  async function handleCancelSearch() {
+    await cancelMatchmakingIfActive();
   }
 
   async function handleCreate() {
     setError("");
+    await cancelMatchmakingIfActive();
     setLoading(true);
     try {
       const tc = TIME_CONTROLS[selected];
@@ -109,6 +134,7 @@ export default function LobbyPage() {
   async function handleJoin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
+    await cancelMatchmakingIfActive();
     setLoading(true);
     try {
       await api.post(`/api/rooms/${code.toUpperCase()}/join`);

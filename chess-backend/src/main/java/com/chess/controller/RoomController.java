@@ -58,12 +58,13 @@ public class RoomController {
         private String colorPreference = "random"; // "white", "black", "random"
     }
 
-    record PlayerInfo(String username, String color, Boolean isReady) {
+    record PlayerInfo(String username, String color, Boolean isReady, Integer eloRating) {
         static PlayerInfo from(RoomPlayer p) {
             return new PlayerInfo(
                     p.getUser().getUsername(),
                     p.getColor() != null ? p.getColor().name() : null,
-                    p.getIsReady()
+                    p.getIsReady(),
+                    p.getUser().getEloRating()
             );
         }
     }

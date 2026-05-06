@@ -15,6 +15,7 @@ public class RoomMessage {
     private String color;
     private boolean allReady;
     private Long gameId;
+    private String roomCode;
     private String whiteUsername;
     private String blackUsername;
 }

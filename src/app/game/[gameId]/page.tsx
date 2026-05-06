@@ -123,7 +123,8 @@ function getInitialClock(gameId?: string) {
 export default function GamePage() {
   const auth = useRequireAuth();
   const params = useParams<{ gameId: string }>();
-  const gameId = params?.gameId;
+  const code = params?.gameId;                        // room code from URL (e.g. "ABCDEF")
+  const [gameId, setGameId] = useState<number | null>(null); // numeric ID for WS
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -136,13 +137,16 @@ export default function GamePage() {
   const [currentTurn, setCurrentTurn] = useState<"white" | "black">("white");
   const [whiteUsername, setWhiteUsername] = useState("");
   const [blackUsername, setBlackUsername] = useState("");
-  const [whiteTimeMs, setWhiteTimeMs] = useState(() => getInitialClock(gameId ?? undefined).whiteTimeMs);
-  const [blackTimeMs, setBlackTimeMs] = useState(() => getInitialClock(gameId ?? undefined).blackTimeMs);
+  const [whiteRating, setWhiteRating] = useState<number | null>(null);
+  const [blackRating, setBlackRating] = useState<number | null>(null);
+  const [whiteTimeMs, setWhiteTimeMs] = useState(() => getInitialClock(code ?? undefined).whiteTimeMs);
+  const [blackTimeMs, setBlackTimeMs] = useState(() => getInitialClock(code ?? undefined).blackTimeMs);
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
   const [hasLoadedGameState, setHasLoadedGameState] = useState(false);
   const [gameResult, setGameResult] = useState<string | null>(null);
   const [endReason, setEndReason] = useState<string | null>(null);
   const [ratingDeltas, setRatingDeltas] = useState<{ white: number; black: number } | null>(null);
+  const [opponentAway, setOpponentAway] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState("");
   const [showResignConfirm, setShowResignConfirm] = useState(false);
@@ -155,7 +159,7 @@ export default function GamePage() {
   const applyState = useCallback((state: ChessGameState) => {
     const nextPieces = state.fen ? fenToPieces(state.fen) : null;
     const nextTurn = state.currentTurn ?? currentTurnRef.current;
-    const localSnapshot = gameId ? readClockSnapshot(gameId) : null;
+    const localSnapshot = code ? readClockSnapshot(code) : null;
     const localLiveClock = localSnapshot?.currentTurn === nextTurn
       ? getLiveSnapshotClock(localSnapshot)
       : null;
@@ -179,31 +183,41 @@ export default function GamePage() {
     }
     if (state.whiteUsername) setWhiteUsername(state.whiteUsername);
     if (state.blackUsername) setBlackUsername(state.blackUsername);
+    if (state.whiteRating !== undefined) setWhiteRating(state.whiteRating);
+    if (state.blackRating !== undefined) setBlackRating(state.blackRating);
     if (state.result) {
       setGameResult(state.result);
       setEndReason(state.endReason ?? null);
       if (state.whiteRatingDelta != null && state.blackRatingDelta != null) {
         setRatingDeltas({ white: state.whiteRatingDelta, black: state.blackRatingDelta });
       }
-      // Refresh user profile to get updated eloRating
+      localStorage.removeItem("chess-active-game");
       api.get("/api/users/me").then((res) => setUser(res.data)).catch(() => {});
     }
 
     if (nextPieces) piecesRef.current = nextPieces;
     setHasLoadedGameState(true);
-  }, [gameId]);
+  }, [code]);
 
   useEffect(() => {
     currentTurnRef.current = currentTurn;
   }, [currentTurn]);
 
-  // Load initial state
+  // Track active game in localStorage for reconnect
   useEffect(() => {
-    if (!gameId) return;
-    api.get<ChessGameState>(`/api/games/${gameId}`).then((res) => {
+    if (!code) return;
+    localStorage.setItem("chess-active-game", code);
+    return () => localStorage.removeItem("chess-active-game");
+  }, [code]);
+
+  // Load initial state by room code, extract numeric gameId for WS
+  useEffect(() => {
+    if (!code) return;
+    api.get<ChessGameState>(`/api/games/room/${code}`).then((res) => {
+      setGameId(res.data.gameId);
       applyState(res.data);
     });
-  }, [applyState, gameId]);
+  }, [applyState, code]);
 
   useEffect(() => {
     if (!auth || !accessToken || user) return;
@@ -214,7 +228,11 @@ export default function GamePage() {
   useEffect(() => {
     if (!connected || !gameId) return;
 
-    const gameSub = subscribe(`/topic/game/${gameId}`, applyState);
+    const gameSub = subscribe(`/topic/game/${gameId}`, (msg: ChessGameState & { type?: string; username?: string }) => {
+      if (msg.type === "player_away") { setOpponentAway(true); return; }
+      if (msg.type === "player_back") { setOpponentAway(false); return; }
+      applyState(msg);
+    });
     const chatSub = subscribe(`/topic/chat/${gameId}`, (msg: ChatMessage) => {
       setChatMessages((prev) => [...prev, msg]);
     });
@@ -222,6 +240,7 @@ export default function GamePage() {
       setError(body.error);
       setTimeout(() => setError(""), 3000);
     });
+    send(`/app/game/${gameId}/reconnect`, {});
 
     return () => {
       gameSub?.unsubscribe();
@@ -238,9 +257,20 @@ export default function GamePage() {
     }, 100);
     return () => clearInterval(id);
   }, [currentTurn, gameResult]);
+  
+  // FE-driven timeout trigger
+  useEffect(() => {
+    if (gameResult || !gameId || !connected) return;
+    const isWhiteTurn = currentTurn === "white";
+    if (isWhiteTurn && whiteTimeMs <= 0) {
+      send(`/app/game/${gameId}/timeout`, {});
+    } else if (!isWhiteTurn && blackTimeMs <= 0) {
+      send(`/app/game/${gameId}/timeout`, {});
+    }
+  }, [whiteTimeMs, blackTimeMs, currentTurn, gameResult, gameId, connected, send]);
 
   useEffect(() => {
-    if (!gameId || !hasLoadedGameState) return;
+    if (!code || !hasLoadedGameState) return;
 
     const snapshot: ClockSnapshot = {
       whiteTimeMs,
@@ -249,8 +279,8 @@ export default function GamePage() {
       gameResult,
       updatedAt: Date.now(),
     };
-    localStorage.setItem(getClockStorageKey(gameId), JSON.stringify(snapshot));
-  }, [blackTimeMs, currentTurn, gameId, gameResult, hasLoadedGameState, whiteTimeMs]);
+    localStorage.setItem(getClockStorageKey(code), JSON.stringify(snapshot));
+  }, [blackTimeMs, code, currentTurn, gameResult, hasLoadedGameState, whiteTimeMs]);
 
   // Auto-redirect to lobby 5s after game ends
   useEffect(() => {
@@ -259,18 +289,17 @@ export default function GamePage() {
     setRedirectCountdown(5);
     
     const interval = setInterval(() => {
-      setRedirectCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          clearInterval(interval);
-          router.push("/lobby");
-          return 0;
-        }
-        return prev - 1;
-      });
+      setRedirectCountdown((prev) => (prev === null || prev <= 0) ? 0 : prev - 1);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [gameResult, router]);
+  }, [gameResult]);
+
+  useEffect(() => {
+    if (redirectCountdown === 0) {
+      router.push("/lobby");
+    }
+  }, [redirectCountdown, router]);
 
   const handleMove = useCallback((from: string, to: string, promotion?: string) => {
     if (!gameId || !pieces) return;
@@ -294,7 +323,7 @@ export default function GamePage() {
     }
     
     send(`/app/game/${gameId}/move`, {
-      gameId: Number(gameId),
+      gameId,
       fromSquare: from,
       toSquare: to,
       promotion: promotion ?? null,
@@ -367,7 +396,7 @@ export default function GamePage() {
     send(`/app/game/${gameId}/resign`, {});
   };
 
-  if (!auth || !gameId) return null;
+  if (!auth || !code) return null;
 
   if (!myColor) {
     return (
@@ -381,11 +410,14 @@ export default function GamePage() {
 
   const isMyTurn = currentTurn === myColor;
   const opponentName = myColor === "white" ? blackUsername : whiteUsername;
+  const opponentRating = myColor === "white" ? blackRating : whiteRating;
   const myName = user?.username ?? "";
+  const myRating = myColor === "white" ? whiteRating : blackRating;
   const myTime = myColor === "white" ? whiteTimeMs : blackTimeMs;
   const oppTime = myColor === "white" ? blackTimeMs : whiteTimeMs;
   const myTimeStr = formatTime(myTime);
   const oppTimeStr = formatTime(oppTime);
+
 
   const resultText = () => {
     if (!gameResult) return null;
@@ -422,8 +454,14 @@ export default function GamePage() {
               {opponentName?.[0]?.toUpperCase()}
             </div>
             <div>
-              <p className="text-white font-semibold text-sm">{opponentName}</p>
-              <p className="text-gray-400 text-xs">{myColor === "white" ? "Đen" : "Trắng"}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-white font-semibold text-sm">{opponentName}</p>
+                {opponentRating && <span className="text-[#B1A7FC] text-xs font-bold">({opponentRating})</span>}
+              </div>
+              {opponentAway && !gameResult
+                ? <p className="text-yellow-400 text-xs">Đang rời máy...</p>
+                : <p className="text-gray-400 text-xs">{myColor === "white" ? "Đen" : "Trắng"}</p>
+              }
             </div>
           </div>
           <div className={`text-2xl font-bold font-mono px-4 py-1 rounded-lg ${!isMyTurn && !gameResult ? "bg-white text-[#2A2D45]" : "bg-[#1E2035] text-gray-400"}`}>
@@ -457,7 +495,10 @@ export default function GamePage() {
               {myName?.[0]?.toUpperCase()}
             </div>
             <div>
-              <p className="text-white font-semibold text-sm">{myName}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-white font-semibold text-sm">{myName}</p>
+                {myRating && <span className="text-[#B1A7FC] text-xs font-bold">({myRating})</span>}
+              </div>
               <p className="text-[#B1A7FC] text-xs">{myColor === "white" ? "Trắng" : "Đen"} · {isMyTurn ? "Lượt của bạn" : "Đang chờ..."}</p>
             </div>
           </div>

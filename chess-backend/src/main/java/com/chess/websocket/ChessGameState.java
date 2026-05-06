@@ -24,6 +24,8 @@ public class ChessGameState {
     private String endReason;
     private String whiteUsername;
     private String blackUsername;
+    private Integer whiteRating;
+    private Integer blackRating;
     private Long whiteTimeMs;
     private Long blackTimeMs;
     private Integer whiteRatingDelta;

@@ -267,7 +267,7 @@ export default function Chessboard({
                 {row + 1}
               </span>
             )}
-            {row === 0 && (
+            {(flip ? row === 7 : row === 0) && (
               <span className={`absolute bottom-0.5 right-0.5 text-[10px] uppercase font-bold md:text-xs ${isBlack ? "text-[#E8EDF9]" : "text-[#B7C0D8]"}`}>
                 {horizonAxis[col]}
               </span>

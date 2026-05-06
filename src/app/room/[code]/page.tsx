@@ -49,8 +49,8 @@ export default function RoomPage() {
         api.get(`/api/rooms/${code}`).then((res) => setRoom(res.data));
       }
 
-      if (msg.type === "game_start" && msg.gameId) {
-        router.push(`/game/${msg.gameId}`);
+      if (msg.type === "game_start" && msg.roomCode) {
+        router.push(`/game/${msg.roomCode}`);
       }
     });
 
@@ -104,7 +104,18 @@ export default function RoomPage() {
                     {name?.[0]?.toUpperCase() ?? "?"}
                   </div>
                   <div>
-                    <p className="text-white font-semibold">{name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-white font-semibold">{name}</p>
+                      {isMe ? (
+                        user?.eloRating && <span className="text-[#B1A7FC] text-xs font-bold">{user.eloRating}</span>
+                      ) : (
+                        room?.players.find(p => p.username === name)?.eloRating && (
+                          <span className="text-[#B1A7FC] text-xs font-bold">
+                            {room.players.find(p => p.username === name)?.eloRating}
+                          </span>
+                        )
+                      )}
+                    </div>
                     {isMe && <p className="text-gray-400 text-xs">Bạn</p>}
                   </div>
                 </div>

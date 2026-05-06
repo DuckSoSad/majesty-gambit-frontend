@@ -4,6 +4,7 @@ import Link from "next/link";
 import GuidePopup from "@/components/GuidePopup";
 import { useGuide } from "@/hooks/useGuide";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
@@ -13,6 +14,14 @@ export default function Home() {
   const user = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
   const logout = useAuthStore((s) => s.logout);
+
+  // Redirect back to ongoing game if user has one
+  useEffect(() => {
+    if (!accessToken) return;
+    api.get<{ roomCode?: string }>("/api/games/active").then((res) => {
+      if (res.data.roomCode) router.replace(`/game/${res.data.roomCode}`);
+    }).catch(() => {});
+  }, [accessToken, router]);
 
   async function handleLogout() {
     const { refreshToken } = useAuthStore.getState();

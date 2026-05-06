@@ -11,6 +11,8 @@ export interface ChessGameState {
   endReason?: string;
   whiteUsername?: string;
   blackUsername?: string;
+  whiteRating?: number;
+  blackRating?: number;
   whiteTimeMs?: number;
   blackTimeMs?: number;
   whiteRatingDelta?: number;
@@ -23,6 +25,7 @@ export interface RoomMessage {
   color?: string;
   allReady?: boolean;
   gameId?: number;
+  roomCode?: string;
   whiteUsername?: string;
   blackUsername?: string;
 }
@@ -41,6 +44,7 @@ export interface PlayerInfo {
   username: string;
   color?: string;
   isReady: boolean;
+  eloRating?: number;
 }
 
 export interface UserInfo {

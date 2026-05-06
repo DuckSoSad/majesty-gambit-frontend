@@ -3,6 +3,7 @@ package com.chess.service;
 import com.chess.entity.Game;
 import com.chess.entity.Room;
 import com.chess.entity.User;
+import com.chess.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -19,6 +20,7 @@ public class MatchmakingService {
 
     private final RoomService roomService;
     private final GameService gameService;
+    private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     // timeKey ("blitz:300") → queue of waiting players
@@ -26,66 +28,66 @@ public class MatchmakingService {
 
     public synchronized void enqueue(User user, String timeControl, int timeLimitSeconds) {
         String timeKey = timeControl.toLowerCase() + ":" + timeLimitSeconds;
-        log.info("[MATCHMAKING] enqueue called: user={} (id={}), timeKey={}",
-                user.getUsername(), user.getId(), timeKey);
+        int myElo = user.getEloRating() != null ? user.getEloRating() : 100;
 
         ConcurrentLinkedDeque<QueueEntry> queue =
                 queues.computeIfAbsent(timeKey, k -> new ConcurrentLinkedDeque<>());
 
-        log.info("[MATCHMAKING] Queue size BEFORE removeFromAll: {}", queue.size());
         removeFromAllQueues(user.getId());
-        log.info("[MATCHMAKING] Queue size AFTER removeFromAll: {}", queue.size());
 
-        QueueEntry opponent = null;
+        QueueEntry best = null;
+        int bestDiff = Integer.MAX_VALUE;
         for (QueueEntry entry : queue) {
-            log.info("[MATCHMAKING] Checking entry: {} (id={})",
-                    entry.user().getUsername(), entry.user().getId());
-            if (!entry.user().getId().equals(user.getId())) {
-                opponent = entry;
-                break;
+            int diff = Math.abs(entry.eloRating() - myElo);
+            if (diff < bestDiff) {
+                bestDiff = diff;
+                best = entry;
             }
         }
 
-        if (opponent != null) {
-            queue.remove(opponent);
-            log.info("[MATCHMAKING] MATCH FOUND: {} vs {}", user.getUsername(), opponent.user().getUsername());
-            startMatchedGame(user, opponent.user(), timeControl, timeLimitSeconds);
+        if (best != null) {
+            queue.remove(best);
+
+            startMatchedGame(user.getId(), user.getUsername(), best.userId(), best.username(), timeControl, timeLimitSeconds);
         } else {
-            queue.add(new QueueEntry(user, timeControl, timeLimitSeconds));
-            log.info("[MATCHMAKING] No opponent found. Queued {} for {}. Queue size now: {}",
-                    user.getUsername(), timeKey, queue.size());
+            queue.add(new QueueEntry(user.getId(), user.getUsername(), myElo, timeControl, timeLimitSeconds));
+
         }
     }
 
     public synchronized void dequeue(User user) {
         removeFromAllQueues(user.getId());
-        log.info("{} left matchmaking queue", user.getUsername());
     }
 
     private void removeFromAllQueues(Long userId) {
-        queues.values().forEach(q -> q.removeIf(e -> e.user().getId().equals(userId)));
+        queues.values().forEach(q -> q.removeIf(e -> e.userId().equals(userId)));
     }
 
-    private void startMatchedGame(User p1, User p2, String timeControl, int timeLimitSeconds) {
+    private void startMatchedGame(Long userId1, String username1,
+                                   Long userId2, String username2,
+                                   String timeControl, int timeLimitSeconds) {
         try {
-            log.info("[MATCHMAKING] startMatchedGame: {} vs {}, tc={}, time={}",
-                    p1.getUsername(), p2.getUsername(), timeControl, timeLimitSeconds);
+            User p1 = userRepository.findById(userId1)
+                    .orElseThrow(() -> new RuntimeException("User not found: " + userId1));
+            User p2 = userRepository.findById(userId2)
+                    .orElseThrow(() -> new RuntimeException("User not found: " + userId2));
+
             Room.TimeControl tc = Room.TimeControl.valueOf(timeControl.toLowerCase());
             Room room = roomService.createMatchmakingRoom(p1, p2, tc, timeLimitSeconds);
             Game game = gameService.startGame(room);
 
-            Map<String, Object> msg = Map.of("type", "match_found", "gameId", game.getId());
-            log.info("[MATCHMAKING] Sending match_found to {} and {}, gameId={}",
-                    p1.getUsername(), p2.getUsername(), game.getId());
-            messagingTemplate.convertAndSendToUser(p1.getUsername(), "/queue/matchmaking", msg);
-            messagingTemplate.convertAndSendToUser(p2.getUsername(), "/queue/matchmaking", msg);
-            log.info("[MATCHMAKING] Match started successfully: {} vs {} → game {}",
-                    p1.getUsername(), p2.getUsername(), game.getId());
+            Map<String, Object> msg = Map.of(
+                    "type", "match_found",
+                    "gameId", game.getId(),
+                    "roomCode", room.getCode()
+            );
+            messagingTemplate.convertAndSendToUser(username1, "/queue/matchmaking", msg);
+            messagingTemplate.convertAndSendToUser(username2, "/queue/matchmaking", msg);
         } catch (Exception e) {
-            log.error("[MATCHMAKING] FAILED to start matched game for {} vs {}: {}",
-                    p1.getUsername(), p2.getUsername(), e.getMessage(), e);
+            log.error("[MATCHMAKING] Failed to start game for {} vs {}: {}", username1, username2, e.getMessage(), e);
         }
     }
 
-    public record QueueEntry(User user, String timeControl, int timeLimitSeconds) {}
+    public record QueueEntry(Long userId, String username, int eloRating,
+                              String timeControl, int timeLimitSeconds) {}
 }

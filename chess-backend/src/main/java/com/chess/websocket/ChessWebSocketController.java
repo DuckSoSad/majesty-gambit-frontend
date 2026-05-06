@@ -72,6 +72,15 @@ public class ChessWebSocketController {
         }
     }
 
+    @MessageMapping("/game/{gameId}/timeout")
+    public void handleTimeout(@DestinationVariable Long gameId) {
+        try {
+            gameService.processTimeout(gameId, true);
+        } catch (Exception e) {
+            log.warn("Timeout processing failed for game {}: {}", gameId, e.getMessage());
+        }
+    }
+
     /**
      * Client join phòng: SEND /app/room/{roomCode}/join
      * Broadcast: /topic/room/{roomCode}
@@ -111,6 +120,7 @@ public class ChessWebSocketController {
                 RoomMessage startMsg = RoomMessage.builder()
                         .type("game_start")
                         .gameId(game.getId())
+                        .roomCode(roomCode)
                         .whiteUsername(game.getWhitePlayer().getUsername())
                         .blackUsername(game.getBlackPlayer().getUsername())
                         .build();
@@ -123,6 +133,17 @@ public class ChessWebSocketController {
                     ErrorMessage.of(e.getMessage())
             );
         }
+    }
+
+    /**
+     * Client reconnect vào game: SEND /app/game/{gameId}/reconnect
+     * Broadcast: player_back để đối thủ biết người chơi đã quay lại
+     */
+    @MessageMapping("/game/{gameId}/reconnect")
+    public void handleReconnect(@DestinationVariable Long gameId, Principal principal) {
+        if (principal == null) return;
+        messagingTemplate.convertAndSend("/topic/game/" + gameId,
+                Map.of("type", "player_back", "username", principal.getName()));
     }
 
     /**

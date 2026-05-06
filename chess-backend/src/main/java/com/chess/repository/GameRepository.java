@@ -30,4 +30,10 @@ public interface GameRepository extends JpaRepository<Game, Long> {
         ORDER BY g.startedAt DESC
         """)
     List<Game> findFinishedByPlayer(@Param("user") User user, Pageable pageable);
+
+    @Query("SELECT g FROM Game g JOIN FETCH g.whitePlayer JOIN FETCH g.blackPlayer JOIN FETCH g.room WHERE (g.whitePlayer = :user OR g.blackPlayer = :user) AND g.result IS NULL")
+    Optional<Game> findActiveByPlayer(@Param("user") User user);
+
+    @Query("SELECT g FROM Game g JOIN FETCH g.whitePlayer JOIN FETCH g.blackPlayer JOIN FETCH g.room WHERE g.result IS NULL")
+    List<Game> findAllActive();
 }

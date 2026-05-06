@@ -13,9 +13,11 @@ import com.github.bhlangonijr.chesslib.Side;
 import com.github.bhlangonijr.chesslib.Square;
 import com.github.bhlangonijr.chesslib.move.Move;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import org.springframework.data.domain.PageRequest;
 
 import java.time.Duration;
@@ -23,10 +25,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class GameService {
 
     private final GameRepository gameRepository;
@@ -34,7 +37,48 @@ public class GameService {
     private final RoomRepository roomRepository;
     private final RoomPlayerRepository roomPlayerRepository;
     private final UserRepository userRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
+    @Scheduled(fixedDelay = 1000)
+    public void checkTimeouts() {
+        List<Game> activeGames = gameRepository.findAllActive();
+        for (Game game : activeGames) {
+            try {
+                this.processTimeout(game.getId(), false);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    @Transactional
+    public void processTimeout(Long gameId, boolean force) {
+        Game game = gameRepository.findByIdWithPlayers(gameId).orElse(null);
+        if (game == null || game.getResult() != null) return;
+
+        Board board = new Board();
+        board.loadFromFen(game.getCurrentFen());
+        ClockSnapshot clock = getLiveClockSnapshot(game, board.getSideToMove());
+        
+        boolean isWhiteTurn = board.getSideToMove() == com.github.bhlangonijr.chesslib.Side.WHITE;
+        long remaining = isWhiteTurn ? clock.whiteTimeMs() : clock.blackTimeMs();
+
+        if (force || remaining <= 500) {
+            Game.GameResult gr = isWhiteTurn ? Game.GameResult.black_win : Game.GameResult.white_win;
+            Game.WinnerColor wc = isWhiteTurn ? Game.WinnerColor.black : Game.WinnerColor.white;
+            
+            game.setResult(gr);
+            game.setWinnerColor(wc);
+            game.setEndReason(Game.EndReason.timeout);
+            game.setEndedAt(LocalDateTime.now());
+            
+            maybeUpdateRatings(game);
+            gameRepository.save(game);
+            
+            ChessGameState state = buildChessGameState(game);
+            messagingTemplate.convertAndSend("/topic/game/" + game.getId(), state);
+        }
+    }
+
+    @Transactional
     public Game startGame(Room room) {
         List<RoomPlayer> players = new ArrayList<>(roomPlayerRepository.findByRoomCode(room.getCode()));
         if (players.size() < 2) throw new RuntimeException("Cần đủ 2 người chơi");
@@ -82,6 +126,7 @@ public class GameService {
         return gameRepository.save(game);
     }
 
+    @Transactional
     public ChessGameState processMove(Long gameId, String fromSq, String toSq,
                                       String promotion, String username, int timeSpentMs) {
         Game game = gameRepository.findByIdWithPlayers(gameId)
@@ -127,6 +172,10 @@ public class GameService {
                     .moveHistory(getMoveHistory(game))
                     .result(gr.name())
                     .endReason("timeout")
+                    .whiteUsername(game.getWhitePlayer().getUsername())
+                    .blackUsername(game.getBlackPlayer().getUsername())
+                    .whiteRating(game.getWhitePlayer().getEloRating())
+                    .blackRating(game.getBlackPlayer().getEloRating())
                     .whiteTimeMs(game.getWhiteTimeMs())
                     .blackTimeMs(game.getBlackTimeMs())
                     .whiteRatingDelta(td != null ? td[0] : null)
@@ -134,7 +183,6 @@ public class GameService {
                     .build();
         }
 
-        // ===== Validate và thực hiện nước đi =====
         Square from = Square.valueOf(fromSq.toUpperCase());
         Square to   = Square.valueOf(toSq.toUpperCase());
 
@@ -173,8 +221,8 @@ public class GameService {
                 .build();
         moveRepository.save(record);
 
-        // ===== Cập nhật game =====
         game.setCurrentFen(newFen);
+        game.setLastMoveAt(now);
 
         String result    = null;
         String endReason = null;
@@ -189,10 +237,13 @@ public class GameService {
             result = "draw"; endReason = "stalemate";
             game.setResult(Game.GameResult.draw);
             game.setEndReason(Game.EndReason.stalemate);
-            game.setEndedAt(now);
+        }
+        
+        int[] md = null;
+        if (game.getResult() != null) {
+            md = maybeUpdateRatings(game);
         }
         gameRepository.save(game);
-        int[] md = (game.getResult() != null) ? maybeUpdateRatings(game) : null;
 
         return ChessGameState.builder()
                 .gameId(gameId)
@@ -205,6 +256,10 @@ public class GameService {
                 .isStalemate(isStale)
                 .result(result)
                 .endReason(endReason)
+                .whiteUsername(game.getWhitePlayer().getUsername())
+                .blackUsername(game.getBlackPlayer().getUsername())
+                .whiteRating(game.getWhitePlayer().getEloRating())
+                .blackRating(game.getBlackPlayer().getEloRating())
                 .whiteTimeMs(game.getWhiteTimeMs())
                 .blackTimeMs(game.getBlackTimeMs())
                 .whiteRatingDelta(md != null ? md[0] : null)
@@ -212,6 +267,7 @@ public class GameService {
                 .build();
     }
 
+    @Transactional
     public ChessGameState resign(Long gameId, String username) {
         Game game = gameRepository.findByIdWithPlayers(gameId)
                 .orElseThrow(() -> new RuntimeException("Game không tồn tại"));
@@ -229,8 +285,8 @@ public class GameService {
         game.setResult(gr); game.setWinnerColor(wc);
         game.setEndReason(Game.EndReason.resign);
         game.setEndedAt(LocalDateTime.now());
-        gameRepository.save(game);
         int[] rd = maybeUpdateRatings(game);
+        gameRepository.save(game);
 
         return ChessGameState.builder()
                 .gameId(gameId)
@@ -238,6 +294,10 @@ public class GameService {
                 .moveHistory(getMoveHistory(game))
                 .result(gr.name())
                 .endReason("resign")
+                .whiteUsername(game.getWhitePlayer().getUsername())
+                .blackUsername(game.getBlackPlayer().getUsername())
+                .whiteRating(game.getWhitePlayer().getEloRating())
+                .blackRating(game.getBlackPlayer().getEloRating())
                 .whiteTimeMs(game.getWhiteTimeMs())
                 .blackTimeMs(game.getBlackTimeMs())
                 .whiteRatingDelta(rd != null ? rd[0] : null)
@@ -249,7 +309,10 @@ public class GameService {
     public ChessGameState getGameState(Long gameId) {
         Game game = gameRepository.findByIdWithPlayers(gameId)
                 .orElseThrow(() -> new RuntimeException("Game không tồn tại"));
+        return buildChessGameState(game);
+    }
 
+    private ChessGameState buildChessGameState(Game game) {
         Board board = new Board();
         board.loadFromFen(game.getCurrentFen());
 
@@ -257,7 +320,7 @@ public class GameService {
         boolean noMoves = board.legalMoves().isEmpty();
         ClockSnapshot clock = getLiveClockSnapshot(game, board.getSideToMove());
         return ChessGameState.builder()
-                .gameId(gameId)
+                .gameId(game.getId())
                 .fen(game.getCurrentFen())
                 .moveHistory(getMoveHistory(game))
                 .currentTurn(board.getSideToMove() == Side.WHITE ? "white" : "black")
@@ -268,6 +331,8 @@ public class GameService {
                 .endReason(game.getEndReason() != null ? game.getEndReason().name() : null)
                 .whiteUsername(game.getWhitePlayer().getUsername())
                 .blackUsername(game.getBlackPlayer().getUsername())
+                .whiteRating(game.getWhitePlayer().getEloRating())
+                .blackRating(game.getBlackPlayer().getEloRating())
                 .whiteTimeMs(clock.whiteTimeMs())
                 .blackTimeMs(clock.blackTimeMs())
                 .build();
@@ -388,37 +453,57 @@ public class GameService {
 
     private record ClockSnapshot(long whiteTimeMs, long blackTimeMs) {}
 
-    // Returns [whiteDelta, blackDelta] or null if not a matchmaking game
     private int[] maybeUpdateRatings(Game game) {
         if (game.getResult() == null) return null;
-        if (!Boolean.TRUE.equals(game.getRoom().getIsMatchmaking())) return null;
-
+        
+        boolean isMatchmaking = Boolean.TRUE.equals(game.getRoom().getIsMatchmaking());
+                 
+        if (!isMatchmaking) return null;
+        
         User white = userRepository.findById(game.getWhitePlayer().getId()).orElse(game.getWhitePlayer());
         User black = userRepository.findById(game.getBlackPlayer().getId()).orElse(game.getBlackPlayer());
-
+        
         int rW = white.getEloRating() != null ? white.getEloRating() : 100;
         int rB = black.getEloRating() != null ? black.getEloRating() : 100;
-
+        
         double scoreW, scoreB;
         if (game.getResult() == Game.GameResult.white_win)      { scoreW = 1.0; scoreB = 0.0; }
         else if (game.getResult() == Game.GameResult.black_win) { scoreW = 0.0; scoreB = 1.0; }
         else                                                     { scoreW = 0.5; scoreB = 0.5; }
-
+        
         int dW = eloChange(rW, rB, scoreW);
         int dB = eloChange(rB, rW, scoreB);
+        
         white.setEloRating(Math.max(0, rW + dW));
         black.setEloRating(Math.max(0, rB + dB));
         userRepository.save(white);
         userRepository.save(black);
+        
         game.setWhiteRatingDelta(dW);
         game.setBlackRatingDelta(dB);
         gameRepository.save(game);
+        
         return new int[]{ dW, dB };
     }
 
     private int eloChange(int myRating, int oppRating, double score) {
         double expected = 1.0 / (1 + Math.pow(10, (oppRating - myRating) / 400.0));
         return (int) Math.round(20 * (score - expected));
+    }
+
+    public record ActiveGameInfo(Long gameId, String roomCode) {}
+
+    @Transactional(readOnly = true)
+    public Optional<ActiveGameInfo> findActiveGame(User user) {
+        return gameRepository.findActiveByPlayer(user)
+                .map(g -> new ActiveGameInfo(g.getId(), g.getRoom().getCode()));
+    }
+
+    @Transactional(readOnly = true)
+    public ChessGameState getGameStateByRoomCode(String code) {
+        Game game = gameRepository.findByRoomCodeWithPlayers(code)
+                .orElseThrow(() -> new RuntimeException("Game không tồn tại"));
+        return buildChessGameState(game);
     }
 
     @Transactional(readOnly = true)
