@@ -35,7 +35,8 @@ public class SecurityConfig {
 
     private List<String> allowedOrigins = List.of(
             "http://localhost:3000",
-            "http://localhost:5173"
+            "http://localhost:5173",
+            "https://sso.d2s.com.vn:1116"
     );
 
     @Bean

@@ -1,8 +1,10 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "@/store/useAuthStore";
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
 const api = axios.create({
-  baseURL: "http://localhost:8080",
+  baseURL: BASE_URL,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -51,7 +53,7 @@ async function refreshAccessToken() {
     }
 
     try {
-      const res = await axios.post("http://localhost:8080/api/auth/refresh", {
+      const res = await axios.post(`${BASE_URL}/api/auth/refresh`, {
         refreshToken,
       });
       setAccessToken(res.data.accessToken);

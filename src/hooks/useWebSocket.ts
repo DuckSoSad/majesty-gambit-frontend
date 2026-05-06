@@ -15,7 +15,7 @@ export function useWebSocket(token: string | null) {
     if (!token) return;
 
     const client = new Client({
-      webSocketFactory: () => new SockJS("http://localhost:8080/ws"),
+      webSocketFactory: () => new SockJS(`${process.env.NEXT_PUBLIC_WS_URL ?? "http://localhost:8080"}/ws`),
       connectHeaders: { Authorization: `Bearer ${token}` },
       onConnect: () => setConnected(true),
       onDisconnect: () => setConnected(false),
